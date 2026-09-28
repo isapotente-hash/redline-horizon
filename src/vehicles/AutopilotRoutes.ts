@@ -1,7 +1,7 @@
 import {Road, RoadNetwork} from '../world/RoadNetwork';
 import {wrap} from '../core/math';
 export type RouteExit={road:Road;d:number;direction:number;angle:number;label:string};
-export type RouteChoice={id:string;road:Road;d:number;distance:number;options:RouteExit[];selected:number;locked:boolean};
+export type RouteChoice={id:string;road:Road;d:number;distance:number;options:RouteExit[];selected:number;locked:boolean;visible:boolean;dismissed:boolean;expiresAt:number};
 type Link={road:Road;d:number;other:Road;otherD:number};
 /** Topology comes from actual ribbon crossings, not the much larger terrain blending zones. */
 export class AutopilotRoutes {
@@ -35,14 +35,21 @@ export class AutopilotRoutes {
     for(const list of this.links.values())list.sort((a,b)=>a.d-b.d);
   }
   reset(){this.choice=undefined;this.passed.clear();}
-  select(index:number){const c=this.choice;if(!c||c.locked||!Number.isInteger(index)||!c.options[index])return false;c.selected=index;return true;}
+  select(index:number){const c=this.choice;if(!c||c.locked||c.dismissed||!Number.isInteger(index)||!c.options[index])return false;c.selected=index;c.locked=true;c.visible=false;c.dismissed=true;return true;}
   consume(){if(this.choice){this.passed.set(this.choice.id,this.choice.d);this.choice=undefined;}}
-  update(road:Road,d:number,direction:number,speed:number){
+  private window(c:RouteChoice,speed:number,closingSpeed:number,now:number){
+    const threshold=Math.max(50,speed*2.5);
+    if(c.distance<=threshold||c.locked){c.locked=true;c.visible=false;c.dismissed=true;return;}
+    if(c.visible&&now>=c.expiresAt){c.visible=false;c.dismissed=true;return;}
+    const eta=closingSpeed>.1?(c.distance-threshold)/closingSpeed:Infinity;
+    if(!c.dismissed&&!c.visible&&eta<=4&&eta>0){c.visible=true;c.expiresAt=now+4;}
+  }
+  update(road:Road,d:number,direction:number,speed:number,closingSpeed=speed,now=performance.now()/1000){
     const gap=(target:number)=>road.closed?wrap((target-d)*direction+road.length/2,road.length)-road.length/2:(target-d)*direction;
     for(const [key,at] of this.passed)if(!key.startsWith(`${this.roads.roads.indexOf(road)}:`)||Math.abs(gap(at))>450)this.passed.delete(key);
     if(this.choice){
       const c=this.choice;c.distance=gap(c.d);
-      if(c.road!==road||c.distance < -28){this.consume();}else{c.locked ||= c.distance<Math.max(50,speed*2.5);return c;}
+      if(c.road!==road||c.distance < -28){this.consume();}else{this.window(c,speed,closingSpeed,now);return c;}
     }
     const lead=Math.max(180,speed*8+speed*speed/7),list=this.links.get(road)||[];
     let closest:Link|undefined,dist=Infinity;
@@ -62,7 +69,8 @@ export class AutopilotRoutes {
     if(options.length===2&&options.every(o=>o.label==='Straight')&&options[0].angle-options[1].angle>.04){options[0].label='Left';options[1].label='Right';}
     let selected=options.findIndex(o=>o.road===road&&o.direction===direction);
     if(selected<0)selected=options.reduce((best,o,i)=>Math.abs(o.angle)<Math.abs(options[best].angle)?i:best,0);
-    this.choice={id:`${this.roads.roads.indexOf(road)}:${Math.round(closest.d/12)}:${direction}`,road,d:closest.d,distance:dist,options,selected,locked:dist<Math.max(50,speed*2.5)};
+    this.choice={id:`${this.roads.roads.indexOf(road)}:${Math.round(closest.d/12)}:${direction}`,road,d:closest.d,distance:dist,options,selected,locked:false,visible:false,dismissed:false,expiresAt:0};
+    this.window(this.choice,speed,closingSpeed,now);
     return this.choice;
   }
 }

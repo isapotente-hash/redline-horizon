@@ -8,6 +8,7 @@ const BIKE_SEATS = [[0,.15,-1.08],[0,.6,-.65],[0,1.4,-.26]];
 const PICKUP_SEATS = [[0,.25,-2.55],[0,.65,-1.55],[-.48,1,-.35]];
 /** Runs once per render, after physics and visual interpolation. Never tracks raw body translation. */
 export class CameraManager {
+  onFoot=false;
   mode=0; orbitYaw=.6; orbitPitch=.21; distance=8.5; photoFov=50; roll=0;
   drag=false; lastX=0; lastY=0;
   target=new T.Vector3(); freePosition=new T.Vector3(); freeYaw=0; freePitch=0; photo=false;
@@ -30,7 +31,7 @@ export class CameraManager {
   constructor(public camera:T.PerspectiveCamera, canvas:HTMLCanvasElement) {
     const signal=this.events.signal;
     canvas.addEventListener('pointerdown',e=>{
-      if(this.photo||this.mode>=5){this.drag=true;this.lastX=e.clientX;this.lastY=e.clientY;canvas.setPointerCapture(e.pointerId);}
+      if(this.onFoot||this.photo||this.mode>=5){this.drag=true;this.lastX=e.clientX;this.lastY=e.clientY;canvas.setPointerCapture(e.pointerId);}
     },{signal});
     canvas.addEventListener('pointermove',e=>{
       if(!this.drag)return;
@@ -40,7 +41,7 @@ export class CameraManager {
     },{signal});
     for(const name of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(name,()=>{this.drag=false;},{signal});
     canvas.addEventListener('wheel',e=>{
-      if(this.photo||this.mode>=5){this.distance=clamp(this.distance+e.deltaY*.01,2.5,40);e.preventDefault();}
+      if(this.onFoot||this.photo||this.mode>=5){this.distance=clamp(this.distance+e.deltaY*.01,2.5,40);e.preventDefault();}
     },{passive:false,signal});
   }
   dispose(){this.events.abort();this.drag=false;}
@@ -63,6 +64,21 @@ export class CameraManager {
       R.QueryFilterFlags.EXCLUDE_DYNAMIC|R.QueryFilterFlags.EXCLUDE_KINEMATIC|R.QueryFilterFlags.EXCLUDE_SENSORS,
       undefined,undefined,car.body);
     if(hit)position.copy(this.from).addScaledVector(this.direction,Math.max(0,hit.timeOfImpact-.35));
+  }
+  startFoot(visual:T.Object3D){
+    this.onFoot=true;this.following=false;this.orbitYaw=Math.atan2(this.camera.position.x-visual.position.x,this.camera.position.z-visual.position.z);this.orbitPitch=.25;this.distance=3.6;
+  }
+  stopFoot(){this.onFoot=false;this.following=false;this.setMode(0);}
+  updateFoot(dt:number,visual:T.Object3D,car:VehiclePhysics){
+    const p=visual.position,instant=!this.following;
+    if(!instant){this.movement.subVectors(p,this.lastPosition);this.camera.position.add(this.movement);this.target.add(this.movement);}
+    this.desired.copy(p).add(this.offset.set(Math.sin(this.orbitYaw)*Math.cos(this.orbitPitch),Math.sin(this.orbitPitch),Math.cos(this.orbitYaw)*Math.cos(this.orbitPitch)).multiplyScalar(this.distance));
+    this.desired.y+=.65;this.right.set(Math.cos(this.orbitYaw),0,-Math.sin(this.orbitYaw));this.desired.addScaledVector(this.right,.5);
+    this.aim.copy(p);this.aim.y+=.45;
+    const alpha=instant?1:-Math.expm1(-14*dt);
+    this.camera.position.lerp(this.desired,alpha);this.target.lerp(this.aim,alpha);this.constrain(car,p,this.camera.position);this.camera.lookAt(this.target);
+    if(this.camera.fov!==58){this.camera.fov=58;this.camera.updateProjectionMatrix();}
+    this.lastPosition.copy(p);this.following=true;
   }
   update(dt:number,car:VehiclePhysics,visual:T.Object3D,state:string,t:number,input:Controls){
     dt=Number.isFinite(dt)?clamp(dt,0,.1):0;
@@ -101,9 +117,9 @@ export class CameraManager {
         this.movement.subVectors(p,this.lastPosition);
         this.camera.position.add(this.movement);this.target.add(this.movement);
       }
-      desired.copy(p).addScaledVector(forward,-(this.mode===0?7.3+this.speed*.018:11));
-      desired.y+=this.mode===0?2.45:3.9;
-      aim.copy(p).addScaledVector(forward,7+this.speed*.075);aim.y+=.75;
+      desired.copy(p).addScaledVector(forward,-(this.mode===0?(car.bike?3.6:4.8)+this.speed*.006:11));
+      desired.y+=this.mode===0?(car.bike?2.7:3.2):3.9;
+      aim.copy(p).addScaledVector(forward,this.mode===0?(car.bike?1.2:1.8):7+this.speed*.075);aim.y+=this.mode===0?.45:.75;
       fov=lerp(62,79,clamp(this.speed/85,0,1));
     }
     const alpha=instant?1:-Math.expm1(-6.5*dt);

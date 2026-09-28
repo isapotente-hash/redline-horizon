@@ -35,6 +35,7 @@ export class InputManager {
         ].includes(e.code)
       )
         e.preventDefault();
+      if(e.altKey&&e.code==="Enter")e.preventDefault();
       if(e.ctrlKey && ["KeyW","KeyA","KeyS","KeyD","KeyR","KeyF","KeyQ","KeyE"].includes(e.code))e.preventDefault();
       if (!this.keys.has(e.code)) this.edges.add(e.code);
       this.keys.add(e.code);
@@ -57,6 +58,10 @@ export class InputManager {
   /** Camera keys never enter driving inputs or manual-assist override detection. */
   readCamera(): Controls {
     return {throttle:this.held("KeyI")?1:0,brake:this.held("KeyK")?1:0,steer:(this.held("KeyJ")?1:0)-(this.held("KeyL")?1:0),up:this.held("KeyO"),down:this.held("KeyU"),handbrake:false};
+  }
+  readFoot():Controls {
+    return {throttle:this.held("KeyW","ArrowUp")?1:0,brake:this.held("KeyS","ArrowDown")?1:0,
+      steer:(this.held("KeyA","ArrowLeft")?1:0)-(this.held("KeyD","ArrowRight")?1:0),handbrake:false,up:false,down:false};
   }
   read(dt: number): Controls {
     let steer =

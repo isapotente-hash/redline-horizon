@@ -1,3 +1,4 @@
+import { OnFootPlayer } from "../player/OnFootPlayer";
 import { PhysicsClock } from "./PhysicsClock";
 import {yieldLoading,finishStartup,loadingProgress} from "./Loading";
 import {DevTools} from './DevTools';
@@ -69,6 +70,8 @@ export class Game {
   police!:PoliceManager;
   lastPoliceMessage=0;
   vehicle!: VehiclePhysics;
+  foot!: OnFootPlayer;
+  private routeVisible=false;
   playerContacts!:PlayerContacts;
   car!: CarVisual;
   baseCar!:CarVisual;
@@ -107,7 +110,7 @@ export class Game {
     };
     this.dev.onReset=()=>{this.police.clearWanted();this.vehicle.reset();this.syncCar(1);};
     this.network.onChange=()=>{this.multiplayer.refresh();if(this.network.ghost)this.playerContacts?.clear();};
-    this.network.canStart=()=>this.running&&!this.preparingWorld&&!!this.vehicle&&!this.police.active&&this.police.rules.impound<=0;
+    this.network.canStart=()=>!this.foot?.active&&this.running&&!this.preparingWorld&&!!this.vehicle&&!this.police.active&&this.police.rules.impound<=0;
     this.network.onConnected=()=>{
       this.remotes.forEach(remote=>remote.reset());this.networkSequence=0;
       this.ui.toast('Room connected');
@@ -187,6 +190,7 @@ export class Game {
         this.roads,
         this.save.settings,
       );
+      this.foot=new OnFootPlayer(this.physics);this.render.scene.add(this.foot.root);
       this.playerContacts=new PlayerContacts(this.physics,this.vehicle);
       await this.world.prime(this.vehicle.position);loadingProgress("terrain",1);
       this.ui.loading("LOADING VEHICLES");
@@ -332,7 +336,10 @@ export class Game {
       return;
     }
     if (!this.running||!this.vehicle||this.preparingWorld) return;
-    if(action.startsWith('route:')){if(this.state==='drive'&&this.autopilot.enabled&&this.save.settings.autopilotMode!=='speed')this.autopilot.routes.select(Number(action.slice(6)));return;}
+    if(action.startsWith('route:')){if(this.state==='drive'&&this.autopilot.enabled&&this.save.settings.autopilotMode!=='speed'&&this.autopilot.routes.choice?.visible&&this.autopilot.routes.select(Number(action.slice(6)))){this.ui.routeChoice(undefined);this.routeVisible=false;}return;}
+    if(action==='vehicle-toggle'){this.toggleFoot();return;}
+    if(this.foot.active&&action==='autopilot'){this.ui.toast('Enter the vehicle to use autopilot');return;}
+    if(this.foot.active&&(['drive','continue','menu','garage','workshop','race','garage-drive'].includes(action)||action.startsWith('travel:'))){this.foot.enter(this.vehicle,true);this.camera.stopFoot();this.ui.footStatus(false,false);}
     this.audio.click(this.save.settings.volume);
     if(action==='dev-open'){if(this.state==='menu'){this.devPanel.lock();this.setState('dev');this.devPanel.focus();}return;}
     if(action==='dev-close'){if(this.state==='dev'){this.devPanel.lock();this.setState('menu');this.ui.root.querySelector<HTMLButtonElement>('[data-action=dev-open]')?.focus();}return;}
@@ -504,16 +511,10 @@ export class Game {
         void this.action("back");
     }
     if (this.input.take("F3")) this.debug = !this.debug;
-    if (this.input.take("KeyF")) {
-      if (!(this.input.held("ShiftLeft", "ShiftRight"))) {
-        if (this.state === "drive") void this.action("autopilot");
-      } else {
-      if (document.fullscreenElement) void document.exitFullscreen();
-      else
-        void document.documentElement
-          .requestFullscreen()
-          .catch(() => this.ui.toast("Fullscreen unavailable"));
-    }
+    if(this.input.take("KeyF")&&this.state==="drive"&&!this.foot.active)void this.action("autopilot");
+    if(this.input.take("Enter")&&this.input.held("AltLeft","AltRight")){
+      if(document.fullscreenElement)void document.exitFullscreen();
+      else void document.documentElement.requestFullscreen().catch(()=>this.ui.toast("Fullscreen unavailable"));
     }
     if (this.state === "photo") {
       if (this.input.take("Tab")) {
@@ -528,6 +529,10 @@ export class Game {
       return;
     }
     if (this.state !== "drive") return;
+    const leftShift=this.input.take("ShiftLeft"),rightShift=this.input.take("ShiftRight");
+    const shift=leftShift||rightShift;
+    if(shift)this.toggleFoot();
+    if(this.foot.active)return;
     for(let i=0;i<9;i++)if(this.input.take(`Digit${i+1}`))void this.action(`route:${i}`);
     if (this.input.take("KeyC")) {
       this.camera.setMode(this.camera.mode + 1);
@@ -557,6 +562,19 @@ export class Game {
     if (this.input.take("KeyG")) void this.action("race");
     if (this.input.take("KeyM")) void this.action("map");
     if (this.input.take("KeyP")) void this.action("photo");
+  }
+  private toggleFoot(){
+    if(this.state!=="drive")return;
+    if(this.foot.active){
+      if(!this.foot.enter(this.vehicle)){this.ui.toast("Move within 2.8 m of the vehicle");return;}
+      this.camera.stopFoot();this.ui.footStatus(false,false);
+    }else{
+      if(this.police.active||this.police.rules.impound>0){this.ui.toast("Finish the pursuit before exiting");return;}
+      if(!this.foot.exit(this.vehicle)){this.ui.toast("No safe exit space — stop on clear ground");return;}
+      this.autopilot.disable();this.playerContacts.clear();this.ui.routeChoice(undefined);this.routeVisible=false;
+      this.camera.startFoot(this.foot.root);this.ui.footStatus(true,this.foot.canEnter(this.vehicle));
+    }
+    this.physicsClock.reset();this.input.steer=0;
   }
   syncCar(alpha: number) {
     this.car.root.position.lerpVectors(
@@ -601,7 +619,7 @@ export class Game {
       this.race.countdown=(this.networkStart-Date.now())/1000;
       this.race.elapsed=Math.max(0,-this.race.countdown);
     }
-    if (driving) {
+    if (driving&&!this.foot.active) {
       const override = autopilotOverride(this.save.settings.autopilotMode, controls);
       if (!override) this.autopilotManualReady = true;
       if (this.autopilot.enabled && this.autopilotManualReady && override) {
@@ -681,10 +699,25 @@ export class Game {
         this.setState("results");
       }
     }
+    if(driving&&this.foot.active){
+      const step=this.physicsClock.step,walk=this.input.readFoot();
+      this.physicsClock.begin(elapsedFrame,performance.now());
+      while(this.physicsClock.take(performance.now())){
+        this.traffic.update(step,this.foot.position,this.save.settings.quality,this.save.settings.simulationDistance,this.save.settings.renderDistance,this.foot.position);
+        this.race.update(step,this.vehicle);
+        this.foot.preStep(walk,this.camera.orbitYaw,step);
+        this.physics.world.step();this.foot.postStep();
+      }
+      this.world.update(this.foot.position,false,this.foot.position);
+    }
     this.coins.animate(driving?dt:0,this.vehicle.position);
     // One render phase: finalized physics -> interpolated vehicle -> camera -> draw.
     // Re-read state because race completion can change it and reset the clock above.
-    this.syncCar(this.state === "drive" ? this.physicsClock.alpha : 1);
+    this.syncCar(this.state === "drive"&&!this.foot.active ? this.physicsClock.alpha : 1);
+    this.foot.render(this.state==="drive"?this.physicsClock.alpha:1);
+    this.foot.root.visible=this.foot.active;
+    if(this.foot.active)this.camera.updateFoot(dt,this.foot.root,this.vehicle);
+    else
     this.camera.update(
       dt,
       this.vehicle,
@@ -694,14 +727,14 @@ export class Game {
       this.input.readCamera(),
     );
     this.updateNetwork(now,dt);
-    this.render.updateAtmosphere(this.elapsed, this.vehicle.position);
+    this.render.updateAtmosphere(this.elapsed, this.foot.active?this.foot.position:this.vehicle.position);
     if (this.state === "garage" || this.state === "workshop") {
       (this.render.scene.fog as T.FogExp2).density = 0;
       this.render.hemi.intensity = 2.5;
       this.render.sun.intensity = 1.4;
     }
-    this.car.root.visible = !(driving && this.camera.mode === 2);
-    this.particles.update(dt, this.vehicle, this.save.settings, driving);
+    this.car.root.visible = !(!this.foot.active&&driving && this.camera.mode === 2);
+    this.particles.update(dt, this.vehicle, this.save.settings, driving&&!this.foot.active);
     const near = this.roads.nearest(
       this.vehicle.position.x,
       this.vehicle.position.z,
@@ -709,18 +742,21 @@ export class Game {
     this.audio.update(
       this.vehicle,
       this.save.settings,
-      driving,
+      driving&&!this.foot.active,
       this.input.held("KeyH"),
       near.road === this.roads.main &&
         near.sample.d > 760 &&
         near.sample.d < 995,
     );
     this.audio.siren(driving&&this.police.active,this.police.nearest);
+    const route=driving&&!this.foot.active&&this.autopilot.enabled&&this.save.settings.autopilotMode!=="speed"&&this.save.settings.autopilotRoutes&&!this.race.active&&!this.race.finished?this.autopilot.routes.choice:undefined;
+    if(!!route?.visible!==this.routeVisible){this.routeVisible=!!route?.visible;this.ui.routeChoice(route);}
     this.frames++;this.hudClock+=dt;
     if (this.hudClock>=.1){
       this.ui.autopilotStatus(this.autopilot.enabled);
       this.hudClock%=.1;
-      this.ui.routeChoice(driving&&this.autopilot.enabled&&this.save.settings.autopilotMode!=='speed'&&this.save.settings.autopilotRoutes&&!this.race.active&&!this.race.finished?this.autopilot.routes.choice:undefined);
+      this.ui.routeChoice(route);
+      this.ui.footStatus(this.foot.active,this.foot.active&&this.foot.canEnter(this.vehicle));
       this.ui.update(
         this.vehicle,
         this.race,

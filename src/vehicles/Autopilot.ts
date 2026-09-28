@@ -58,7 +58,7 @@ export class Autopilot {
     const here = this.roads.at(road, distance);
     const offset = car.position.clone().sub(here.p).dot(here.r);
     if(scene.routeChoices===false)this.routes.reset();
-    const choice=scene.routeChoices===false?undefined:this.routes.update(road,distance,this.direction,car.speed);
+    const choice=scene.routeChoices===false?undefined:this.routes.update(road,distance,this.direction,car.speed,Math.max(0,car.signedSpeed*car.forward.dot(here.t)*this.direction));
     const selected=choice?.options[choice.selected];
     const turning=!!selected&&selected.road!==road;
     if(choice&&choice.distance<18&&choice.distance>0&&turning){

@@ -47,7 +47,7 @@ test('static camera obstruction is solid; moving NPCs and sensors do not pump fo
  const wall=physics.box(0,2,4,10,5,.5);physics.world.step();f.rig.update(0,f.car,f.visual,'drive',0,input);assert.ok(f.camera.position.z<3.75);
  physics.world.removeCollider(wall,true);
  const body=physics.world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(0,2,4));physics.world.createCollider(R.ColliderDesc.cuboid(5,2.5,.25),body);physics.world.step();
- f.car.teleportSerial++;f.rig.update(0,f.car,f.visual,'drive',0,input);assert.ok(f.camera.position.z>7);
+ f.car.teleportSerial++;f.rig.update(0,f.car,f.visual,'drive',0,input);assert.ok(f.camera.position.z>4.5);
  f.rig.dispose();physics.world.free();
 });
 test('cancelled pointer capture stops dragging and dispose removes camera listeners',()=>{

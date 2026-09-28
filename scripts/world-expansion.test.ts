@@ -147,3 +147,13 @@ test('the entire expanded circuit is driveable in real vehicle physics without r
  assert.ok(travel>=roads.main.length,`stuck after ${travel.toFixed(0)}m`);console.log({physicalLapMeters:travel,simulationSeconds:steps*STEP,worstOffset,highestUp});
  physics.world.removeVehicleController(car.controller);physics.world.removeRigidBody(car.body);
 });
+
+test('on-foot exits and walking remain supported on the real coastal tunnel road and its shoulders',async()=>{
+ await ready;const {OnFootPlayer}=await import('../src/player/OnFootPlayer');
+ const car=new VehiclePhysics(physics,roads,{...defaults}),foot=new OnFootPlayer(physics);car.teleport(roads.main,850,3);
+ for(let i=0;i<120;i++){car.preStep(stopped,STEP);physics.world.step();car.postStep(STEP);}
+ assert.ok(foot.exit(car),'safe tunnel exit');const origin=foot.position.clone(),yaw=Math.atan2(-car.forward.x,-car.forward.z);
+ for(let i=0;i<300;i++){foot.preStep({...coast,throttle:1},yaw,STEP);physics.world.step();foot.postStep();const hit=roads.nearest(foot.position.x,foot.position.z);assert.ok(foot.position.y>hit.height+.7,'capsule fell through tunnel road');}
+ assert.ok(foot.position.distanceTo(origin)>5);assert.equal(foot.enter(car),false,'cannot re-enter at distance');foot.enter(car,true);
+ physics.world.removeCharacterController(foot.controller);physics.world.removeRigidBody(foot.body);physics.world.removeVehicleController(car.controller);physics.world.removeRigidBody(car.body);
+});

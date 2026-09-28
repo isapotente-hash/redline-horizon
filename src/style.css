@@ -1223,3 +1223,16 @@ label output {
 .statistics-panel{width:800px;border-top:2px solid var(--mint)}.statistics-panel h2{margin:0}.statistics-panel h3{font-size:11px;letter-spacing:1.6px;margin:28px 0 14px;color:var(--mint)}.statistics-panel h3 small{font-size:8px;letter-spacing:.6px;color:#a6b6c2;margin-left:10px}.statistics-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0}.statistics-grid>div{background:#0c1721b8;border:1px solid #ffffff14;padding:18px;min-width:0}.statistics-grid dt{font-size:11px;color:#a6b6c2}.statistics-grid dd{font-size:27px;margin:10px 0 0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}.statistics-grid dd small{font-size:12px;color:#aec1ca}
 #route-choice{position:absolute;top:106px;left:50%;transform:translateX(-50%);width:min(570px,92vw);padding:15px;background:#0a141fef;border:1px solid #8be8ce55;border-top:2px solid var(--mint);box-shadow:0 12px 30px #0005;pointer-events:auto}.route-heading{display:flex;justify-content:space-between;gap:15px;font-size:10px;letter-spacing:1.4px;color:var(--mint);margin-bottom:12px}#route-options{display:flex;gap:8px}#route-options button{flex:1;min-width:0;text-align:left;background:#182632;border:1px solid #ffffff20;padding:12px 9px;color:#d8e2e8}#route-options button[aria-pressed=true]{background:#244b46;border-color:var(--mint);color:#eafff8}#route-options button:hover:not(:disabled){background:#31544f}#route-options b{display:block;margin:9px 0;font-size:15px}#route-options small{display:block;font-size:8px;letter-spacing:.5px;overflow-wrap:anywhere}#route-options button:disabled{cursor:default}#route-options button:focus-visible{outline:2px solid white;outline-offset:2px}#route-hint{font-size:10px;color:#aec1ca;margin:12px 0 0}
 @media(max-width:700px){.statistics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.statistics-grid>div{padding:12px}.statistics-grid dd{font-size:23px}#route-choice{top:220px;padding:10px}#route-options button{padding:9px 6px}#route-options b{font-size:12px}#route-options small{font-size:7px}}@media(max-height:520px){#route-choice{top:76px;left:auto;right:3vw;transform:none;width:48vw}#route-options b{margin:4px 0}#route-choice .key{display:none}}
+
+/* Compact route decisions stay outside the central driving view. */
+#route-choice{left:18px;top:190px;transform:none;width:240px;max-width:36vw;padding:10px;border-radius:5px;border-top-width:1px;box-shadow:0 4px 15px #0004}
+#route-choice[hidden]{display:none!important}
+#route-choice .route-heading{font-size:9px;letter-spacing:.8px;margin-bottom:7px;gap:6px}
+#route-options{display:grid;grid-template-columns:1fr;gap:4px}
+#route-options button{display:grid;grid-template-columns:20px 1fr;column-gap:7px;padding:7px 8px;border-radius:3px;min-height:32px}
+#route-options b{font-size:12px;margin:0;line-height:18px}
+#route-options small{grid-column:2;font-size:8px;line-height:12px;opacity:.7}
+#route-options .key{padding:1px 4px;font-size:9px;align-self:start}
+#route-hint{font-size:9px;margin:7px 0 0}
+.on-foot .instruments,.on-foot #race-hud,.on-foot #autopilot-toggle,.on-foot .minimap,.on-foot #law-hud{display:none!important}
+@media(max-width:700px){#route-choice{left:10px;top:160px;width:185px;max-width:40vw;padding:8px}#route-options button{padding:6px}#route-options b{font-size:11px}}
