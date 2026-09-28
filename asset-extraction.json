@@ -1,0 +1,20 @@
+{
+  "sourceSha256": "f3802d6d1a16d4af3952f39dda8c08c8f17bfae057a58fdb81be69bad4a1c1a6",
+  "assets": [
+    {
+      "file": "REVUELTO.glb",
+      "bytes": 4121632,
+      "sha256": "9e8841516d16302b140ec9afcb82be8dabc54528aa646624b8b0cd50ed48faa1"
+    },
+    {
+      "file": "MOTORCYCLE.glb",
+      "bytes": 925364,
+      "sha256": "746f6d24a65f774ca98f3d2b0de1f9507a00eeccacf22503777ba0357de24ea3"
+    },
+    {
+      "file": "VANTA_R1.glb",
+      "bytes": 6056948,
+      "sha256": "444a56b4392ccb8cad484e33a66dc66d46d3f2446de92b3fe8483371eb8be1b4"
+    }
+  ]
+}
