@@ -10,13 +10,14 @@ import {defaults} from '../src/core/SaveManager';
 import {TrafficManager} from '../src/vehicles/TrafficManager';
 import {Autopilot} from '../src/vehicles/Autopilot';
 import {REGION_LABELS} from '../src/world/RegionalScenery';
+const STEP=1/Number(process.env.PHYSICS_TEST_HZ||120);
 const stopped={throttle:0,brake:1,steer:0,handbrake:true,up:false,down:false};
 const coast={...stopped,brake:0,handbrake:false};
 const context=new Proxy({createImageData:(w:number,h:number)=>({data:new Uint8ClampedArray(w*h*4)}),measureText:()=>({width:10})},{get:(obj,key)=>key in obj?(obj as any)[key]:()=>{}});
 (globalThis as any).document={createElement:()=>({width:512,height:512,getContext:()=>context})};
 const roads=new RoadNetwork();
 let physics:PhysicsWorld,world:World;
-const ready=(async()=>{physics=await new PhysicsWorld().init();world=await new World(roads,physics,{...defaults,quality:'low'}).init();physics.world.step();})();
+const ready=(async()=>{physics=await new PhysicsWorld().init();physics.world.timestep=STEP;world=await new World(roads,physics,{...defaults,quality:'low'}).init();physics.world.step();})();
 
 test('expanded roads are connected, span a larger world and cover distinct regions',()=>{
  assert.ok(roads.main.length>19000&&roads.main.length<21000);
@@ -55,11 +56,11 @@ test('all eight vehicle types drive through the coastal tunnel in both direction
  for(const spec of CARS)for(const direction of [-1,1]){
   car.spec=spec;const a=roads.at(roads.main,direction>0?700:1060),p=a.p.clone().addScaledVector(a.r,direction*4);
   car.setPosition(p.x,p.y+.8,p.z,Math.atan2(-a.t.x*direction,-a.t.z*direction));
-  for(let i=0;i<120;i++){car.preStep(stopped,1/120);physics.world.step();car.postStep(1/120);}
+  for(let i=0;i<120;i++){car.preStep(stopped,STEP);physics.world.step();car.postStep(STEP);}
   const pilot=new Autopilot(roads);pilot.toggle(car);
   let completed=false;
   for(let i=0;i<3000;i++){
-   car.preStep(pilot.controls(car,90),1/120);physics.world.step();car.postStep(1/120);
+   car.preStep(pilot.controls(car,90,'full',coast,{},STEP),STEP);physics.world.step();car.postStep(STEP);
    const hit=roads.nearest(car.position.x,car.position.z,false,roads.main);maxUp=Math.max(maxUp,car.body.linvel().y);
    assert.ok(car.body.linvel().y<10,`${spec.id}: launch`);assert.ok(car.position.y>hit.height+.2,`${spec.id}: fell through road`);
    if(direction>0?hit.sample.d>1040:hit.sample.d<720){completed=true;break;}
@@ -74,9 +75,9 @@ test('grazing both road barriers at speed does not create a vertical catapult; h
  for(const spec of [CARS[0],CARS[3],CARS[5]])for(const side of [-1,1]){
   car.spec=spec;const a=roads.at(roads.main,340),p=a.p.clone().addScaledVector(a.r,side*(roads.main.width/2+.15));
   car.setPosition(p.x,p.y+.85,p.z,Math.atan2(-a.t.x,-a.t.z));
-  for(let i=0;i<120;i++){car.preStep(stopped,1/120);physics.world.step();car.postStep(1/120);}
+  for(let i=0;i<120;i++){car.preStep(stopped,STEP);physics.world.step();car.postStep(STEP);}
   const velocity=a.t.clone().multiplyScalar(38).addScaledVector(a.r,side*9);car.body.setLinvel(velocity,true);
-  for(let i=0;i<240;i++){car.preStep(coast,1/120);physics.world.step();car.postStep(1/120);highest=Math.max(highest,car.body.linvel().y);assert.ok(car.body.linvel().y<12,`${spec.id}: edge launched vehicle`);assert.ok(car.speed<50);impact ||= car.crashSerial>0;}
+  for(let i=0;i<240;i++){car.preStep(coast,STEP);physics.world.step();car.postStep(STEP);highest=Math.max(highest,car.body.linvel().y);assert.ok(car.body.linvel().y<12,`${spec.id}: edge launched vehicle`);assert.ok(car.speed<50);impact ||= car.crashSerial>0;}
  }
  assert.ok(impact,'solid impacts should still trigger crash effects');physics.world.removeVehicleController(car.controller);physics.world.removeRigidBody(car.body);console.log({edgeMaxUpwardSpeed:highest});
 });
@@ -93,7 +94,7 @@ test('NPC headings, lane positions and collider poses follow their assigned road
  assert.ok(Math.abs(c.root.rotation.z)<.04,'crash tilt must not survive recovery');assert.ok(Math.hypot(c.body.linvel().x,c.body.linvel().y,c.body.linvel().z)<.1,'spawn must not generate a kinematic velocity spike');
  c.road=roads.roads.find(r=>r.name==='RIDGE CONNECTOR')!;c.direction=1;c.d=c.road.length-20;c.lane=3;traffic.recover(c);c.speed=10;
  const original=c.road;
- for(let i=0;i<1800;i++){traffic.update(1/120,c.root.position.clone().add(new T.Vector3(0,0,100)),'low');physics.world.step();}
+ for(let i=0;i<1800;i++){traffic.update(STEP,c.root.position.clone().add(new T.Vector3(0,0,100)),'low');physics.world.step();}
  assert.notEqual(c.road,original,'NPC must follow a connected road through the junction');console.log({npcPoseChecks:checks});
  physics.world.removeRigidBody(c.body);
 });
@@ -112,9 +113,9 @@ test('streamed scenery and terrain stay bounded after crossing distant regions',
 test('mountain tunnel can be driven on its grade by a car, a motorcycle and a pickup',async()=>{
  await ready;const road=roads.roads.find(r=>r.name==='SUMMIT PASS')!,car=new VehiclePhysics(physics,roads,{...defaults});
  for(const spec of [CARS[0],CARS[3],CARS[5]]){
-  car.spec=spec;car.teleport(road,1000);for(let i=0;i<120;i++){car.preStep(stopped,1/120);physics.world.step();car.postStep(1/120);}
+  car.spec=spec;car.teleport(road,1000);for(let i=0;i<120;i++){car.preStep(stopped,STEP);physics.world.step();car.postStep(STEP);}
   const pilot=new Autopilot(roads);pilot.toggle(car);let finished=false;
-  for(let i=0;i<4500;i++){car.preStep(pilot.controls(car,72),1/120);physics.world.step();car.postStep(1/120);const near=roads.nearest(car.position.x,car.position.z,true,road);assert.ok(car.position.y>near.height+.18);if(near.sample.d>1440){finished=true;break;}}
+  for(let i=0;i<4500;i++){car.preStep(pilot.controls(car,72,'full',coast,{},STEP),STEP);physics.world.step();car.postStep(STEP);const near=roads.nearest(car.position.x,car.position.z,true,road);assert.ok(car.position.y>near.height+.18);if(near.sample.d>1440){finished=true;break;}}
   assert.ok(finished,`${spec.id} blocked in mountain tunnel`);
  }
  physics.world.removeVehicleController(car.controller);physics.world.removeRigidBody(car.body);
@@ -122,7 +123,7 @@ test('mountain tunnel can be driven on its grade by a car, a motorcycle and a pi
 
 test('relocating to steep road sections aligns each vehicle with the road instead of embedding its nose',async()=>{
  await ready;const road=roads.roads.find(r=>r.name==='SUMMIT PASS')!,car=new VehiclePhysics(physics,roads,{...defaults});
- for(const spec of CARS){car.spec=spec;car.teleport(road,2800);const surface=roads.at(road,2800);assert.ok(car.forward.dot(surface.t)>.9999);for(let i=0;i<120;i++){car.preStep(stopped,1/120);physics.world.step();car.postStep(1/120);}assert.ok(car.contacts>=2);assert.ok(Math.abs(car.body.linvel().y)<1.5);}
+ for(const spec of CARS){car.spec=spec;car.teleport(road,2800);const surface=roads.at(road,2800);assert.ok(car.forward.dot(surface.t)>.9999);for(let i=0;i<120;i++){car.preStep(stopped,STEP);physics.world.step();car.postStep(STEP);}assert.ok(car.contacts>=2);assert.ok(Math.abs(car.body.linvel().y)<1.5);}
  physics.world.removeVehicleController(car.controller);physics.world.removeRigidBody(car.body);
 });
 
@@ -134,15 +135,15 @@ test('hidden race opponents have no live colliders before a race starts',async()
 
 test('the entire expanded circuit is driveable in real vehicle physics without resets or checkpoint shortcuts',async()=>{
  await ready;const car=new VehiclePhysics(physics,roads,{...defaults}),pilot=new Autopilot(roads);car.teleport(roads.main,120);
- for(let i=0;i<120;i++){car.preStep(stopped,1/120);physics.world.step();car.postStep(1/120);}pilot.toggle(car);
+ for(let i=0;i<120;i++){car.preStep(stopped,STEP);physics.world.step();car.postStep(STEP);}pilot.toggle(car);
  let travel=0,last=120,worstOffset=0,highestUp=0,steps=0;
  for(;steps<180000&&travel<roads.main.length;steps++){
-  car.preStep(pilot.controls(car,90),1/120);physics.world.step();car.postStep(1/120);
+  car.preStep(pilot.controls(car,90,'full',coast,{},STEP),STEP);physics.world.step();car.postStep(STEP);
   const n=roads.nearest(car.position.x,car.position.z,false,roads.main);let delta=n.sample.d-last;if(delta<-roads.main.length/2)delta+=roads.main.length;if(delta>roads.main.length/2)delta-=roads.main.length;travel+=delta;last=n.sample.d;
   worstOffset=Math.max(worstOffset,Math.abs(n.offset));highestUp=Math.max(highestUp,car.body.linvel().y);
   assert.ok(Number.isFinite(n.distance)&&n.distance<roads.main.width/2-.3,`left route at ${last.toFixed(1)}m`);
   assert.ok(car.position.y>n.height+.18,`fell through road at ${last.toFixed(1)}m`);
  }
- assert.ok(travel>=roads.main.length,`stuck after ${travel.toFixed(0)}m`);console.log({physicalLapMeters:travel,simulationSeconds:steps/120,worstOffset,highestUp});
+ assert.ok(travel>=roads.main.length,`stuck after ${travel.toFixed(0)}m`);console.log({physicalLapMeters:travel,simulationSeconds:steps*STEP,worstOffset,highestUp});
  physics.world.removeVehicleController(car.controller);physics.world.removeRigidBody(car.body);
 });

@@ -222,50 +222,28 @@ export class RoadNetwork {
   }
   sampleIndex(road:Road,d:number){let lo=0,hi=road.samples.length-1;while(lo+1<hi){const m=(lo+hi)>>1;if(road.samples[m].d<=d)lo=m;else hi=m;}return lo;}
   nearest(x: number, z: number, wide = false, onlyRoad?:Road): RoadHit {
-    let best: RoadHit = {
-      road: this.main,
-      sample: this.main.samples[0],
-      distance: Infinity,
-      offset: 0,
-      height: 24,
-    };
-    const gx = Math.floor(x / 100),
-      gz = Math.floor(z / 100),
-      rad = wide ? 4 : 1;
-    for (let dz = -rad; dz <= rad; dz++)
-      for (let dx = -rad; dx <= rad; dx++)
-        for (const item of this.grid.get(`${gx + dx},${gz + dz}`) || []) {
-          if(onlyRoad && item.road!==onlyRoad)continue;
-          const a = item.road.samples[item.i],
-            b = item.road.samples[item.i + 1],
-            vx = b.p.x - a.p.x,
-            vz = b.p.z - a.p.z,
-            f = clamp(
-              ((x - a.p.x) * vx + (z - a.p.z) * vz) / (vx * vx + vz * vz),
-              0,
-              1,
-            ),
-            px = a.p.x + vx * f,
-            pz = a.p.z + vz * f,
-            dist = Math.hypot(x - px, z - pz);
-          if (dist < best.distance) {
-            const p = new T.Vector3(px, lerp(a.p.y, b.p.y, f), pz),
-              r = a.r.clone().lerp(b.r, f).normalize();
-            best = {
-              road: item.road,
-              sample: {
-                p,
-                t: a.t.clone().lerp(b.t, f).normalize(),
-                r,
-                d: lerp(a.d, b.d === 0 ? item.road.length : b.d, f),
-              },
-              distance: dist,
-              offset: (x - px) * r.x + (z - pz) * r.z,
-              height: p.y,
-            };
-          }
-        }
-    return best;
+    // Search with scalars; materialize vectors only for the winning segment.
+    let bestDistance = Infinity, bestRoad = this.main, bestIndex = 0, bestF = 0;
+    const gx = Math.floor(x / 100), gz = Math.floor(z / 100), rad = wide ? 4 : 1;
+    for (let dz = -rad; dz <= rad; dz++) for (let dx = -rad; dx <= rad; dx++) {
+      const cell = this.grid.get(`${gx + dx},${gz + dz}`);
+      if (!cell) continue;
+      for (const item of cell) {
+        if (onlyRoad && item.road !== onlyRoad) continue;
+        const a = item.road.samples[item.i], b = item.road.samples[item.i + 1];
+        const vx = b.p.x - a.p.x, vz = b.p.z - a.p.z, length2 = vx * vx + vz * vz;
+        if (length2 <= 1e-12) continue;
+        const f = clamp(((x - a.p.x) * vx + (z - a.p.z) * vz) / length2, 0, 1);
+        const ex = x - a.p.x - vx * f, ez = z - a.p.z - vz * f, distance2 = ex * ex + ez * ez;
+        if (distance2 < bestDistance) { bestDistance = distance2; bestRoad = item.road; bestIndex = item.i; bestF = f; }
+      }
+    }
+    if (!Number.isFinite(bestDistance)) return {road:this.main,sample:this.main.samples[0],distance:Infinity,offset:0,height:24};
+    const a = bestRoad.samples[bestIndex], b = bestRoad.samples[bestIndex + 1];
+    const p = a.p.clone().lerp(b.p, bestF), r = a.r.clone().lerp(b.r, bestF).normalize();
+    return {road:bestRoad, sample:{p, r, t:a.t.clone().lerp(b.t, bestF).normalize(),
+      d:lerp(a.d, b.d === 0 ? bestRoad.length : b.d, bestF)},
+      distance:Math.sqrt(bestDistance), offset:(x-p.x)*r.x+(z-p.z)*r.z, height:p.y};
   }
   rawHeight(x: number, z: number) {
     const coast = 150 + Math.sin(z * 0.0018) * 90,

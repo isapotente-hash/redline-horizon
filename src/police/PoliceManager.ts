@@ -91,7 +91,7 @@ export class PoliceManager {
 
     }
   }
-  /** Pursuit decisions run at 10 Hz; vehicle suspension/contacts still tick at 120 Hz. */
+  /** Pursuit decisions run at 10 Hz; vehicle suspension/contacts follow the fixed physics timestep. */
   plan(u:PoliceManager['units'][number],player:VehiclePhysics,traffic:NavigationCar[]) {
     const car=u.car,hit=this.roads.nearest(car.position.x,car.position.z),playerHit=this.roads.nearest(player.position.x,player.position.z);
     // Keep the assigned road at crossings until the actual recorded trail takes another road.

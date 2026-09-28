@@ -1,3 +1,4 @@
+import { SAVE_KEY, BACKUP_KEY, SAVE_VERSION, readSave, record } from "./SaveStorage";
 import { CARS, carSpec } from "../vehicles/CarCatalog";
 import { Loadout, STOCK, UPGRADES, UPGRADE_SLOTS } from "../vehicles/UpgradeCatalog";
 export type Settings = {
@@ -44,7 +45,29 @@ export const defaults: Settings = {
   camera: 0,
   units: "kmh",
 };
+function validSettings(value:unknown):Settings {
+  const result={...defaults}, a=record(value)?value:{};
+  for(const key of ['adaptiveResolution','autopilotRoutes','cycle','automatic','traction','stability'] as const)
+    if(typeof a[key]==='boolean')result[key]=a[key];
+  const bounds={renderDistance:[500,3000],simulationDistance:[250,1000],autopilotSpeed:[30,180],hour:[0,24],volume:[0,1],tint:[0,1],camera:[0,6]} as const;
+  for(const key of Object.keys(bounds) as (keyof typeof bounds)[])
+    if(Number.isFinite(a[key]))result[key]=Math.max(bounds[key][0],Math.min(bounds[key][1],a[key]));
+  result.camera=Math.floor(result.camera);
+  result.raceLaps=a.raceLaps===3?3:1;
+  if(['full','steering','speed'].includes(a.autopilotMode))result.autopilotMode=a.autopilotMode;
+  if(['low','medium','high','ultra'].includes(a.quality))result.quality=a.quality;
+  if(['clear','cloudy','rain','fog'].includes(a.weather))result.weather=a.weather;
+  if(['kmh','mph'].includes(a.units))result.units=a.units;
+  for(const key of ['paint','wheels'] as const)if(typeof a[key]==='string'&&/^#[0-9a-f]{6}$/i.test(a[key]))result[key]=a[key];
+  return result;
+}
+const nonnegative=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)?Math.max(0,v):0;
 export class SaveManager {
+  onError:()=>void=()=>{};
+  storageError=false;
+  private readOnly=false;
+  // The current world has no locked tracks; retain legacy unlock IDs for future catalogs.
+  unlockedTracks:string[]=[];
   settings: Settings = { ...defaults };
   coins = 0;
   statistics={drivingSeconds:0,topSpeedKmh:0,racesCompleted:0};
@@ -103,23 +126,23 @@ export class SaveManager {
   distance = 0;
   position: { x: number; y: number; z: number; yaw: number } | null = null;
   constructor() {
+    const loaded=readSave();
+    this.readOnly=loaded.readOnly;
+    this.storageError=loaded.unavailable||loaded.readOnly;
     try {
-      const a = JSON.parse(
-        localStorage.getItem("redline-horizon-v1") || "null",
-      );
+      const a = loaded.data;
       if (a) {
-        this.settings = { ...defaults, ...a.settings };
-        this.settings.autopilotRoutes=a.settings?.autopilotRoutes!==false;
+        this.settings = validSettings(a.settings);
         for(const key of Object.keys(this.statistics) as (keyof typeof this.statistics)[]){const value=a.statistics?.[key];if(Number.isFinite(value)&&value>=0)this.statistics[key]=value;}
-        this.settings.renderDistance=Number.isFinite(this.settings.renderDistance)?Math.max(500,Math.min(3000,this.settings.renderDistance)):defaults.renderDistance;
-        this.settings.simulationDistance=Number.isFinite(this.settings.simulationDistance)?Math.max(250,Math.min(1000,this.settings.simulationDistance)):defaults.simulationDistance;
         if(a.performanceEdition===5)this.settings.quality=defaults.quality;
-        this.best = Number(a.best) || 0;
-        this.bestByLaps={1:this.best,3:Number(a.bestByLaps?.[3])||0};
-        this.legacyRecords=a.legacyRecords||{};
+        this.best = nonnegative(a.best);
+        this.bestByLaps={1:this.best,3:nonnegative(a.bestByLaps?.[3])};
+        this.legacyRecords=record(a.legacyRecords)?a.legacyRecords:{};
         if(a.layoutVersion!==2 && this.best>0){this.legacyRecords['original-circuit']={best:this.best,bestByLaps:this.bestByLaps};this.best=0;this.bestByLaps={};}
-        this.distance = Number(a.distance) || 0;
-        this.position = a.position || null;
+        this.distance = nonnegative(a.distance);
+        this.position = record(a.position)&&['x','y','z','yaw'].every(k=>Number.isFinite(a.position[k]))
+          ? {x:a.position.x,y:a.position.y,z:a.position.z,yaw:a.position.yaw} : null;
+        this.unlockedTracks=Array.isArray(a.unlockedTracks)?[...new Set<string>(a.unlockedTracks.filter((id:unknown)=>typeof id==='string'))]:[];
         this.coins = Number.isFinite(a.coins) ? Math.max(0,Math.floor(a.coins)) : 0;
         this.rewardMeters=Number.isFinite(a.rewardMeters)?Math.max(0,Math.min(999.999,a.rewardMeters)):0;
         if (Array.isArray(a.ownedCars)) for (const id of a.ownedCars) if (CARS.some(c=>c.id===id)) this.ownedCars.add(id);
@@ -133,22 +156,31 @@ export class SaveManager {
           this.loadouts[car.id]=loadout;
         }
       }
-    } catch {}
+    } catch { this.storageError=true; }
+    // Import before Game creates UI, coin items or vehicle kits. Leave legacy keys untouched.
+    if(loaded.data&&!this.readOnly)this.save();
   }
-  save() {
+  save():boolean {
+    if(this.readOnly)return false;
     try {
-      localStorage.setItem(
-        "redline-horizon-v1",
-        JSON.stringify({
-          coins: this.coins, ownedCars: [...this.ownedCars], selectedCar: this.selectedCar,
-          collectedCoins: [...this.collectedCoins],
-          loadouts:this.loadouts,ownedUpgrades:this.ownedUpgrades,rewardMeters:this.rewardMeters,
-          settings: this.settings,
-          best: this.best, bestByLaps:this.bestByLaps,layoutVersion:2,legacyRecords:this.legacyRecords,
-          distance: this.distance,statistics:this.statistics,
-          position: this.position,
-        }),
-      );
-    } catch {}
+      const serialized=JSON.stringify({
+        schemaVersion:SAVE_VERSION,savedAt:Date.now(),
+        coins:this.coins,ownedCars:[...this.ownedCars],selectedCar:this.selectedCar,
+        collectedCoins:[...this.collectedCoins],unlockedTracks:this.unlockedTracks,
+        loadouts:this.loadouts,ownedUpgrades:this.ownedUpgrades,rewardMeters:this.rewardMeters,
+        settings:this.settings,best:this.best,bestByLaps:this.bestByLaps,
+        layoutVersion:2,legacyRecords:this.legacyRecords,distance:this.distance,
+        statistics:this.statistics,position:this.position,
+      });
+      // setItem is atomic. A failed write must not erase the last good profile.
+      localStorage.setItem(SAVE_KEY,serialized);
+      this.storageError=false;
+      try { localStorage.setItem(BACKUP_KEY,serialized); } catch { /* Primary is durable even if backup quota is exhausted. */ }
+      return true;
+    } catch {
+      if(!this.storageError)this.onError();
+      this.storageError=true;
+      return false;
+    }
   }
 }

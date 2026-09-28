@@ -1,3 +1,4 @@
+import { PhysicsClock } from "./PhysicsClock";
 import {yieldLoading,finishStartup,loadingProgress} from "./Loading";
 import {DevTools} from './DevTools';
 import {DevPanel} from '../ui/DevPanel';
@@ -86,7 +87,7 @@ export class Game {
   lights = false;
   last = 0;
   elapsed = 0;
-  accumulator = 0;
+  readonly physicsClock = new PhysicsClock();
   fps = 60;
   frames = 0;
   private hudClock=0;
@@ -138,6 +139,7 @@ export class Game {
       this.resultShown=false;this.camera.setMode(0);this.setState('drive');
       this.ui.toast(`ROOM ${this.network.code} · ${laps} lap${laps>1?'s':''} · ${this.network.ghost?'Ghost mode':'Player contact on'}`);
     };
+    this.save.onError = () => this.ui.toast("Progress could not be saved. Browser storage is unavailable or full.");
     this.ui.onAction = (a) => void this.action(a);
     this.ui.onSetting = (k, v) => {
       (this.save.settings as any)[k] = v;
@@ -156,6 +158,7 @@ export class Game {
     addEventListener("blur", () => {
       if (this.state === "drive") this.setState("pause");
     });
+    document.addEventListener("visibilitychange", () => { if(document.hidden){this.persist();this.physicsClock.reset();} });
     addEventListener("pagehide", () => {this.persist();this.network.leave(false);});
     addEventListener("beforeunload", () => this.persist());
   }
@@ -212,10 +215,11 @@ export class Game {
       this.render.scene.add(this.particles.root);
       this.camera.setMode(this.save.settings.camera);
       this.applySettings();
-      for (let i = 0; i < 100; i++) {
-        this.vehicle.preStep(stopped, 1 / 120);
+      this.physics.world.timestep = this.physicsClock.step;
+      for (let i = 0; i < 50; i++) {
+        this.vehicle.preStep(stopped, this.physicsClock.step);
         this.physics.world.step();
-        this.vehicle.postStep(1 / 120);
+        this.vehicle.postStep(this.physicsClock.step);
       }
       this.vehicle.distance = this.save.distance;
       this.syncCar(1);
@@ -289,7 +293,7 @@ export class Game {
     if(state!=='drive')this.playerContacts?.clear();
     this.ui.setState(state);
     this.input.clear();
-    this.accumulator = 0;
+    this.physicsClock.reset();
     this.camera.photo = state === "photo";
     if (state !== "photo") {
       this.render.exposure = 0.95;
@@ -585,7 +589,7 @@ export class Game {
   frame(now: number) {
     if (!this.running) return;
     const elapsedFrame=(now-this.last)/1000;
-    const dt = Math.min(1/15, elapsedFrame);
+    const dt = Math.max(0, Math.min(1/15, elapsedFrame));
     this.render.adaptResolution(elapsedFrame,this.state==="drive");
     this.last = now;
     this.elapsed += dt;
@@ -611,35 +615,36 @@ export class Game {
         limits:!this.dev.noPolice&&!this.race.active&&!this.race.finished?this.police.zones.zones:[],
         cars: this.race.networkRace?[]:this.race.active ? this.race.ai.cars : this.traffic.active ? this.traffic.cars.filter(c => c.body.isEnabled()) : [],
       };
-      this.accumulator += dt;
-      while (this.accumulator >= 1 / 120) {
-        this.police.preStep(1/120,this.vehicle,this.race.active||this.race.finished,this.traffic.active?navigation.cars:[]);
+      const step = this.physicsClock.step;
+      this.physicsClock.begin(elapsedFrame, performance.now());
+      while (this.physicsClock.take(performance.now())) {
+        this.police.preStep(step,this.vehicle,this.race.active||this.race.finished,this.traffic.active?navigation.cars:[]);
         const input =
           this.police.rules.impound>0 ||
           (this.race.active && this.race.countdown > 0)
             ? stopped
-            : this.autopilot.enabled ? this.autopilot.controls(this.vehicle, Math.min(this.save.settings.autopilotSpeed,this.police.limit?this.police.limit-2:Infinity), this.save.settings.autopilotMode, controls, navigation) : controls;
-        this.vehicle.preStep(input, 1 / 120);
+            : this.autopilot.enabled ? this.autopilot.controls(this.vehicle, Math.min(this.save.settings.autopilotSpeed,this.police.limit?this.police.limit-2:Infinity), this.save.settings.autopilotMode, controls, navigation, step) : controls;
+        this.vehicle.preStep(input, step);
         this.traffic.update(
-          1 / 120,
+          step,
           this.vehicle.position,
           this.save.settings.quality,
           this.save.settings.simulationDistance,
           this.save.settings.renderDistance,
           this.camera.mode===6?this.camera.freePosition:this.vehicle.position,
         );
-        this.race.update(1 / 120, this.vehicle);
-        this.playerContacts.update(now-this.accumulator*1000+1000/120,this.network.connected&&!this.network.ghost,this.remotes);
+        this.race.update(step, this.vehicle);
+        this.playerContacts.update(now-this.physicsClock.accumulator*1000,this.network.connected&&!this.network.ghost,this.remotes);
         this.physics.world.step(undefined,this.playerContacts.hooks);
-        this.vehicle.postStep(1 / 120);
-        this.police.postStep(1/120);
-        if(!(this.race.active&&this.race.countdown>0)&&!this.race.finished&&this.police.rules.impound===0)this.save.recordDriving(1/120,this.vehicle.speed*3.6,this.vehicle.contacts>0&&this.vehicle.crashCooldown===0);
+        this.vehicle.postStep(this.physicsClock.step);
+        this.police.postStep(step);
+        if(!(this.race.active&&this.race.countdown>0)&&!this.race.finished&&this.police.rules.impound===0)this.save.recordDriving(step,this.vehicle.speed*3.6,this.vehicle.contacts>0&&this.vehicle.crashCooldown===0);
         if(!this.race.networkRace)(this.race.active?this.race.ai:this.traffic).collisions(this.vehicle);
         if(this.police.messageSerial!==this.lastPoliceMessage) {
           this.lastPoliceMessage=this.police.messageSerial;this.ui.toast(this.police.message);this.ui.economy();
           if(this.police.rules.impound)this.autopilot.disable();
         }
-        const mileageReward=this.rewards.update(1/120,this.vehicle,this.police.rules.impound===0&&!(this.race.active&&this.race.countdown>0)&&!this.race.finished);
+        const mileageReward=this.rewards.update(step,this.vehicle,this.police.rules.impound===0&&!(this.race.active&&this.race.countdown>0)&&!this.race.finished);
         if(mileageReward){this.audio.coin();this.ui.toast(`+${mileageReward} coins`);}
         if(this.vehicle.crashSerial!==this.lastCrash) {
           this.lastCrash=this.vehicle.crashSerial;
@@ -651,8 +656,7 @@ export class Game {
           if(amount){this.audio.coin();this.ui.economy();this.ui.toast(`+${amount} coins`);}
         }
         if (this.police.rules.impound===0 && !(this.race.active && this.race.countdown > 0))
-          this.boosts.update(1 / 120, this.vehicle);
-        this.accumulator -= 1 / 120;
+          this.boosts.update(step, this.vehicle);
       }
       this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);
       if (
@@ -678,7 +682,7 @@ export class Game {
       }
     }
     this.coins.animate(driving?dt:0,this.vehicle.position);
-    this.syncCar(driving ? this.accumulator * 120 : 1);
+    this.syncCar(driving ? this.physicsClock.alpha : 1);
     this.updateNetwork(now,dt);
     this.render.updateAtmosphere(this.elapsed, this.vehicle.position);
     if (this.state === "garage" || this.state === "workshop") {

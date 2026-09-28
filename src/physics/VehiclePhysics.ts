@@ -213,6 +213,22 @@ export class VehiclePhysics {
     const n = this.roads.nearest(this.position.x, this.position.z, true);
     this.teleport(n.road, Number.isFinite(n.distance) ? n.sample.d : 120);
   }
+  // Retain controller ray tests every physics tick; cache only unchanged configuration.
+  private readonly wheelValues = new Float64Array(24).fill(NaN);
+  private readonly wheelFilter = (c:RAPIER.Collider) => c.parent()?.handle !== this.body.handle && !this.physics.peerColliderHandles.has(c.handle);
+  private setWheelValue(kind:number, wheel:number, value:number) {
+    const index=kind*4+wheel;
+    if(this.wheelValues[index]===value)return;
+    this.wheelValues[index]=value;
+    switch(kind){
+      case 0:this.controller.setWheelMaxSuspensionForce(wheel,value);break;
+      case 1:this.controller.setWheelEngineForce(wheel,value);break;
+      case 2:this.controller.setWheelSteering(wheel,value);break;
+      case 3:this.controller.setWheelBrake(wheel,value);break;
+      case 4:this.controller.setWheelFrictionSlip(wheel,value);break;
+      case 5:this.controller.setWheelSideFrictionStiffness(wheel,value);break;
+    }
+  }
   preStep(input: Controls, dt: number) {
     this.boostRemaining = this.infiniteBoost ? 5 : Math.max(0,this.boostRemaining-dt);
     this.previousPosition.copy(this.position);
@@ -333,18 +349,18 @@ export class VehiclePhysics {
       );
     }
     for (let i = 0; i < 4; i++) {
-      this.controller.setWheelMaxSuspensionForce(i,14000*this.chassis.mass/1550*(this.bike&&i<2?1-clamp(this.wheelie/.12,0,1):1));
-      this.controller.setWheelEngineForce(i, i >= 2 ? force / 2 : 0);
-      this.controller.setWheelSteering(i, i < 2 ? this.steering : 0);
-      this.controller.setWheelBrake(
+      this.setWheelValue(0,i,14000*this.chassis.mass/1550*(this.bike&&i<2?1-clamp(this.wheelie/.12,0,1):1));
+      this.setWheelValue(1,i, i >= 2 ? force / 2 : 0);
+      this.setWheelValue(2,i, i < 2 ? this.steering : 0);
+      this.setWheelValue(3,
         i,
         (this.braking * 4700 * this.chassis.mass/1550 * this.tune.brakeForce * 2 * (i<2?this.tune.frontBias:1-this.tune.frontBias) + (input.handbrake && i >= 2 ? 12500*this.chassis.mass/1550 : 0)) * dt,
       );
-      this.controller.setWheelFrictionSlip(
+      this.setWheelValue(4,
         i,
         grip * (i>=2?this.tune.rearGrip*lerp(1,this.tune.brakeRearGrip,this.braking):1) * (input.handbrake && i >= 2 ? 0.28 : 1),
       );
-      this.controller.setWheelSideFrictionStiffness(
+      this.setWheelValue(5,
         i,
         input.handbrake && i >= 2 ? 0.45 : 1.1,
       );
@@ -353,7 +369,7 @@ export class VehiclePhysics {
       dt,
       undefined,
       undefined,
-      (c) => c.parent()?.handle !== b.handle && !this.physics.peerColliderHandles.has(c.handle),
+      this.wheelFilter,
     );
     this.wheelSpin -= (this.signedSpeed * dt) / this.chassis.radius;
     this.roll = damp(this.roll, clamp(-lateral * 0.005, -0.035, 0.035)*this.tune.bodyRoll, 4, dt);
