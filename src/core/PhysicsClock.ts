@@ -11,8 +11,12 @@ export class PhysicsClock {
   begin(delta: number, now: number) {
     this.steps = 0;
     this.started = now;
-    if (Number.isFinite(delta) && delta > 0)
-      this.accumulator = Math.min(this.accumulator + delta, this.step * this.maxSteps);
+    if (Number.isFinite(delta) && delta > 0) {
+      const total=this.accumulator+delta;
+      // Discard only whole overdue ticks; preserve the render interpolation phase.
+      const ticks=Math.floor((total+1e-10)/this.step);
+      this.accumulator=total-Math.max(0,ticks-this.maxSteps)*this.step;
+    }
   }
   take(now: number) {
     if (this.accumulator + 1e-10 < this.step) return false;

@@ -682,14 +682,9 @@ export class Game {
       }
     }
     this.coins.animate(driving?dt:0,this.vehicle.position);
-    this.syncCar(driving ? this.physicsClock.alpha : 1);
-    this.updateNetwork(now,dt);
-    this.render.updateAtmosphere(this.elapsed, this.vehicle.position);
-    if (this.state === "garage" || this.state === "workshop") {
-      (this.render.scene.fog as T.FogExp2).density = 0;
-      this.render.hemi.intensity = 2.5;
-      this.render.sun.intensity = 1.4;
-    }
+    // One render phase: finalized physics -> interpolated vehicle -> camera -> draw.
+    // Re-read state because race completion can change it and reset the clock above.
+    this.syncCar(this.state === "drive" ? this.physicsClock.alpha : 1);
     this.camera.update(
       dt,
       this.vehicle,
@@ -698,6 +693,13 @@ export class Game {
       this.elapsed,
       this.input.readCamera(),
     );
+    this.updateNetwork(now,dt);
+    this.render.updateAtmosphere(this.elapsed, this.vehicle.position);
+    if (this.state === "garage" || this.state === "workshop") {
+      (this.render.scene.fog as T.FogExp2).density = 0;
+      this.render.hemi.intensity = 2.5;
+      this.render.sun.intensity = 1.4;
+    }
     this.car.root.visible = !(driving && this.camera.mode === 2);
     this.particles.update(dt, this.vehicle, this.save.settings, driving);
     const near = this.roads.nearest(
@@ -714,9 +716,9 @@ export class Game {
         near.sample.d < 995,
     );
     this.audio.siren(driving&&this.police.active,this.police.nearest);
-    this.ui.autopilotStatus(this.autopilot.enabled);
     this.frames++;this.hudClock+=dt;
     if (this.hudClock>=.1){
+      this.ui.autopilotStatus(this.autopilot.enabled);
       this.hudClock%=.1;
       this.ui.routeChoice(driving&&this.autopilot.enabled&&this.save.settings.autopilotMode!=='speed'&&this.save.settings.autopilotRoutes&&!this.race.active&&!this.race.finished?this.autopilot.routes.choice:undefined);
       this.ui.update(
@@ -744,7 +746,7 @@ export class Game {
   updateNetwork(now:number,dt:number) {
     const visible=['drive','pause','map','photo','results','multiplayer'].includes(this.state);
     for(const remote of this.remotes)remote.update(now,visible,this.vehicle.position);
-    if(!this.network.connected)return;
+    if(!this.network.connected||this.preparingWorld)return;
     this.networkClock+=dt;if(this.networkClock<.05)return;this.networkClock%=.05;
     const p=this.outgoing,v=this.vehicle;
     p.seq=++this.networkSequence;p.car=this.save.car.id;p.paint=this.save.settings.paint;p.active=visible;

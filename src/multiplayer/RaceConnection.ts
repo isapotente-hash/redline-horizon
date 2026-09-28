@@ -21,10 +21,12 @@ export function loadPeerJS(): Promise<PeerFactory> {
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js';
     script.async = true; script.crossOrigin = 'anonymous';
-    const fail = () => { clearTimeout(timer); script.remove(); library = undefined; reject(new Error('Could not load multiplayer. Check your internet or try another network.')); };
+    let settled=false;
+    const cleanup=()=>{clearTimeout(timer);script.onload=null;script.onerror=null;};
+    const fail = () => { if(settled)return;settled=true;cleanup();script.remove();library=undefined;reject(new Error('Could not load multiplayer. Check your internet or try another network.')); };
     const timer = setTimeout(fail, 20000);
     script.onerror = fail;
-    script.onload = () => { clearTimeout(timer); if (win.Peer) resolve(win.Peer); else fail(); };
+    script.onload = () => { if(settled)return;if(!win.Peer){fail();return;}settled=true;cleanup();resolve(win.Peer); };
     document.head.append(script);
   });
   return library;

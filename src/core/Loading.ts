@@ -6,7 +6,11 @@ export async function finishStartup(){
   const animations=logo?.getAnimations()||[];
   await Promise.all(animations.map(a=>a.finished.catch(()=>{})));
   screen.classList.add('ready');
-  await new Promise<void>(resolve=>{const done=()=>resolve();screen.addEventListener('transitionend',done,{once:true});setTimeout(done,650);});
+  await new Promise<void>(resolve=>{
+    const done=()=>{clearTimeout(timer);screen.removeEventListener('transitionend',onEnd);resolve();};
+    const onEnd=(e:TransitionEvent)=>{if(e.target===screen&&e.propertyName==='opacity')done();};
+    const timer=setTimeout(done,650);screen.addEventListener('transitionend',onEnd);
+  });
   screen.remove();
 }
 

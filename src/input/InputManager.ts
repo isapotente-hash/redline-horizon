@@ -87,7 +87,7 @@ export class InputManager {
           this.edges.add(codes[i]);
         this.oldButtons[i] = b.pressed;
       });
-    } else this.padName = "";
+    } else {this.padName = "";this.oldButtons.fill(false);}
     this.steer = damp(this.steer, clamp(steer, -1, 1), 8, dt);
     return {
       steer: this.steer,

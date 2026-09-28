@@ -55,6 +55,8 @@ export class World {
   roadSectors:{group:T.Object3D;center:T.Vector3;radius:number}[]=[];
   farTiles=new Map<string,T.Mesh>();
   private streaming?:Promise<void>;
+  private streamFailures=0;
+  private nextStreamAt=0;
   private lastUpdate=-Infinity;
   private updateSettings='';
   private lastLod=new T.Vector3(Infinity,Infinity,Infinity);
@@ -64,10 +66,14 @@ export class World {
     while(!next.done){if(performance.now()>=deadline){await yieldLoading();deadline=performance.now()+3;}next=work.next();}
   }
   private queueChunk(x:number,z:number){
-    if(this.streaming)return;
+    if(this.streaming||performance.now()<this.nextStreamAt)return;
     this.streaming=new Promise<void>((resolve,reject)=>setTimeout(()=>this.buildChunkAsync(x,z).then(resolve,reject),0)).finally(()=>{this.streaming=undefined;});
     // Startup/fast-travel awaits failures; driving keeps the last valid world and retries later.
-    void this.streaming.catch(error=>console.error('Terrain streaming failed',error));
+    void this.streaming.then(()=>{this.streamFailures=0;this.nextStreamAt=0;},error=>{
+      this.streamFailures++;
+      this.nextStreamAt=performance.now()+Math.min(30000,1000*2**Math.min(5,this.streamFailures-1));
+      if(this.streamFailures===1)console.error('Terrain streaming failed; retrying with backoff',error);
+    });
   }
   constructor(
     public network: RoadNetwork,

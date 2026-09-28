@@ -150,7 +150,7 @@ export class UI {
         this.mapLast = { x: e.clientX, y: e.clientY };
       }
     });
-    this.map.addEventListener("pointerup", () => (this.mapDrag = false));
+    for(const event of ["pointerup","pointercancel","lostpointercapture"])this.map.addEventListener(event, () => (this.mapDrag = false));
     this.map.addEventListener(
       "wheel",
       (e) => {
