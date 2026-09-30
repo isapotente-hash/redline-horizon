@@ -66,3 +66,7 @@ Regression coverage adds synchronized camera offset/aim at 30/60/144 Hz, uneven 
 - Route warnings are compact and left-docked. Their four-second prediction uses speed projected along the route toward the existing steering-commit threshold (the greater of 50 m or 2.5 seconds of driving). Actual arrival time can change with acceleration/braking. Selection dismisses the panel synchronously while retaining the chosen turn internally. A four-second wall-clock deadline also hides it during a stopped or paused approach; passing the commit threshold clears it earlier.
 
 Validation for this update: 122 automated tests, TypeScript/build validation and asset integrity checks, including all vehicle exit/re-entry variants, blocked/airborne exits, capsule wall collisions, unloaded-edge protection, the actual tunnel road, camera viewport framing, and HUD selection/expiry.
+
+## Circular speedometer
+
+The driving instrument follows the supplied reference: a transparent circular dial, thin outer ring, open-bottom 0–12 RPM scale, continuous yellow sweep with an angular tip, red high-RPM band, centered gear, large speed and a simple unit label. Live readings retain km/h or mph settings and reverse indication. SVG geometry remains sharp at desktop and touch-screen sizes without a texture or extra asset request. Boost, drift and wheelie feedback sits outside the dial. Updates remain on the existing throttled HUD cadence, with no changes to vehicle gearing or physics.

@@ -328,97 +328,14 @@ button[hidden],
   align-items: center;
   gap: 8px;
 }
+small {font-size:.35em;font-weight:400;color:#aab2b9;}
 .instruments {
-  position: absolute;
-  right: 4vw;
-  bottom: 7vh;
-  width: 235px;
-  text-shadow: 0 2px 12px #0006;
+  position:absolute;right:3vw;bottom:3vh;width:clamp(230px,23vw,350px);
+  aspect-ratio:1;pointer-events:none;text-shadow:none;filter:drop-shadow(0 1px 2px #0004);
 }
-.tach {
-  height: 100px;
-  position: relative;
-  margin-bottom: -16px;
-}
-.tach svg {
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-.tach-track {
-  fill: none;
-  stroke: #e7edf12f;
-  stroke-width: 3;
-}
-.tach-fill {
-  fill: none;
-  stroke: #f13f55;
-  stroke-width: 3;
-  stroke-dasharray: 10 100;
-}
-#rpm {
-  position: absolute;
-  left: 50%;
-  top: 43px;
-  transform: translateX(-50%);
-  font-size: 11px;
-  letter-spacing: 1.5px;
-}
-small {
-  font-size: 0.35em;
-  font-weight: 400;
-  color: #aab2b9;
-}
-.tach small {
-  font-size: 8px;
-  color: #aab2b9;
-}
-.speedline {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  justify-content: center;
-}
-#speed {
-  font-size: 78px;
-  font-weight: 400;
-  letter-spacing: -5px;
-  font-variant-numeric: tabular-nums;
-}
-#gear {
-  font-size: 24px;
-  font-weight: 600;
-  border: 1px solid #e3e4db55;
-  width: 34px;
-  height: 39px;
-  text-align: center;
-  padding-top: 4px;
-  align-self: center;
-}
-#unit {
-  font-size: 9px;
-  letter-spacing: 1.5px;
-  writing-mode: vertical-rl;
-}
-.telemetry {
-  display: flex;
-  justify-content: center;
-  gap: 27px;
-  font-size: 8px;
-  letter-spacing: 1.8px;
-  color: #bfc6c9;
-  border-top: 1px solid #ffffff22;
-  padding-top: 11px;
-  margin-top: 5px;
-}
-#drift {
-  position: absolute;
-  right: 0;
-  top: -17px;
-  color: #ffe3a2;
-  font-size: 11px;
-  letter-spacing: 2px;
-}
+.speedometer-dial{display:block;width:100%;height:auto;overflow:visible}
+.speedometer-dial text{font-variant-numeric:tabular-nums;user-select:none}
+.instrument-status{position:absolute;bottom:100%;right:12px;display:grid;gap:4px;text-align:right}
 .drive-help {
   position: absolute;
   bottom: 18px;
@@ -876,8 +793,8 @@ label output {
   }
   .instruments {
     right: 3vw;
-    transform: scale(0.8);
-    transform-origin: bottom right;
+    width:230px;
+    transform:none;
   }
   .minimap {
     width: 145px;
@@ -973,8 +890,9 @@ label output {
     bottom: 85px;
   }
   .instruments {
-    bottom: 76px;
-    transform: scale(0.67);
+    bottom:76px;
+    width:190px;
+    transform:none;
   }
   .drive-help {
     display: none;
@@ -1236,3 +1154,9 @@ label output {
 #route-hint{font-size:9px;margin:7px 0 0}
 .on-foot .instruments,.on-foot #race-hud,.on-foot #autopilot-toggle,.on-foot .minimap,.on-foot #law-hud{display:none!important}
 @media(max-width:700px){#route-choice{left:10px;top:160px;width:185px;max-width:40vw;padding:8px}#route-options button{padding:6px}#route-options b{font-size:11px}}
+
+/* Transient driving feedback sits outside the reference dial. */
+.instrument-status #drift,.instrument-status #boost-status,.instrument-status #wheelie-status{position:static;margin:0;font-size:11px;letter-spacing:.6px;text-shadow:0 1px 5px #0008;font-weight:500;line-height:1.3}
+.instrument-status #drift{color:#ffe3a2}
+.instrument-status [hidden],.instrument-status #drift:empty{display:none}
+@media(max-height:480px){.instruments{width:180px;bottom:72px}}
