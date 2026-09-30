@@ -1160,3 +1160,179 @@ label output {
 .instrument-status #drift{color:#ffe3a2}
 .instrument-status [hidden],.instrument-status #drift:empty{display:none}
 @media(max-height:480px){.instruments{width:180px;bottom:72px}}
+
+/* Alternate labels are absent from desktop layout and accessibility trees. */
+.mobile-action {display:none}
+
+/* Touch-only HUD: mouse/keyboard layouts keep all of their existing rules. */
+@media (hover: none) and (pointer: coarse) {
+  .drive-ui {
+    position:absolute;
+    inset:0;
+    --hud-left:max(12px,env(safe-area-inset-left,0px));
+    --hud-right:max(12px,env(safe-area-inset-right,0px));
+    --hud-top:max(10px,env(safe-area-inset-top,0px));
+    --hud-bottom:max(12px,env(safe-area-inset-bottom,0px));
+    --touch-size:clamp(48px,6vw,56px);
+    --touch-gap:8px;
+    --map-size:94px;
+    --dial-size:152px;
+    --hud-info-top:calc(var(--hud-top) + 94px);
+  }
+  .drive-ui .topbar {
+    top:var(--hud-top);
+    left:var(--hud-left);
+    right:var(--hud-right);
+    display:block;
+  }
+  .drive-ui .topbar > div:first-child {
+    position:absolute;
+    top:0;
+    left:0;
+    max-width:calc(50% - 64px);
+  }
+  .drive-ui .topbar .tiny {font-size:7px;line-height:10px;letter-spacing:1px;margin-bottom:3px}
+  .drive-ui .topbar #location {
+    display:block;
+    font-size:9px;
+    line-height:12px;
+    letter-spacing:.8px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .drive-ui .topbar nav {
+    display:grid;
+    grid-template-columns:minmax(44px,1fr) minmax(70px,1.4fr) repeat(3,minmax(44px,1fr));
+    grid-template-rows:28px 44px;
+    gap:8px;
+    align-items:stretch;
+  }
+  .drive-ui .topbar .hud-wallet {
+    grid-column:1 / -1;
+    grid-row:1;
+    justify-self:center;
+    justify-content:center;
+    min-height:28px;
+    max-width:112px;
+    padding:2px 7px;
+    gap:5px;
+    white-space:nowrap;
+  }
+  .drive-ui .hud-wallet .coin-balance {font-size:12px;overflow:hidden;text-overflow:ellipsis}
+  .drive-ui .hud-wallet .coin-symbol {font-size:17px!important}
+  .drive-ui .topbar button {
+    grid-row:2;
+    min-width:0;
+    min-height:44px;
+    padding:8px 4px;
+    font-size:clamp(8px,2.3vw,10px);
+    line-height:14px;
+    letter-spacing:.2px;
+    white-space:nowrap;
+    border-radius:5px;
+  }
+  .drive-ui .topbar #autopilot-toggle {font-size:clamp(8px,2.3vw,10px);padding:8px 4px}
+  .drive-ui .topbar .key,
+  .drive-ui .topbar .desktop-action {display:none}
+  .drive-ui .topbar .mobile-action {display:inline}
+  .drive-ui .minimap {
+    left:var(--hud-left);
+    bottom:calc(var(--hud-bottom) + var(--touch-size) + 12px);
+    width:var(--map-size);
+    height:var(--map-size);
+  }
+  .drive-ui .map-n {top:5px;font-size:8px}
+  .drive-ui .instruments {
+    right:var(--hud-right);
+    bottom:calc(var(--hud-bottom) + var(--touch-size) + 12px);
+    width:var(--dial-size);
+    transform:none;
+  }
+  .drive-ui .instrument-status {right:8px;gap:3px}
+  .drive-ui .instrument-status > div {font-size:9px!important}
+  .drive-ui .touch-controls {
+    display:grid;
+    grid-template-columns:repeat(2,var(--touch-size)) minmax(8px,1fr) repeat(3,var(--touch-size));
+    gap:var(--touch-gap);
+    left:var(--hud-left);
+    right:var(--hud-right);
+    bottom:var(--hud-bottom);
+    user-select:none;
+    -webkit-user-select:none;
+  }
+  .drive-ui .touch-controls button {
+    width:var(--touch-size);
+    height:var(--touch-size);
+    min-width:48px;
+    min-height:48px;
+    padding:8px 3px;
+    margin:0;
+    border-radius:7px;
+    font-size:10px;
+    line-height:16px;
+  }
+  .drive-ui [data-hold="KeyA"] {grid-column:1}
+  .drive-ui [data-hold="KeyD"] {grid-column:2}
+  .drive-ui [data-hold="Space"] {grid-column:4}
+  .drive-ui [data-hold="KeyS"] {grid-column:5}
+  .drive-ui [data-hold="KeyW"] {grid-column:6;background:#bb233bcc}
+  .drive-ui #touch-wheelie {
+    position:absolute;
+    right:0;
+    bottom:calc(100% + var(--touch-gap));
+    font-size:8px;
+  }
+  .drive-ui:has(#touch-wheelie:not([hidden])) .instruments {
+    bottom:calc(var(--hud-bottom) + 2 * var(--touch-size) + 24px);
+  }
+  .drive-ui #law-hud {top:var(--hud-info-top);left:var(--hud-left);gap:8px;max-width:calc(100vw - var(--hud-left) - var(--hud-right))}
+  .drive-ui #speed-sign {width:44px;height:44px;border-width:4px}
+  .drive-ui #speed-sign strong {font-size:21px;line-height:23px}
+  .drive-ui #speed-sign small {font-size:7px}
+  .drive-ui #law-copy {padding:6px 8px;gap:3px;max-width:195px}
+  .drive-ui #law-title {font-size:8px;letter-spacing:.6px}
+  .drive-ui #law-detail {font-size:8px;line-height:1.35}
+  .drive-ui #mp-hud {top:calc(var(--hud-info-top) + 52px);left:var(--hud-left);max-width:calc(100vw - var(--hud-left) - var(--hud-right));font-size:8px;padding:8px 10px;min-height:32px}
+  .drive-ui #route-choice {top:calc(var(--hud-info-top) + 92px);left:var(--hud-left);right:auto;max-width:45vw;width:176px}
+  .drive-ui #route-options .key,
+  .drive-ui #route-hint {display:none}
+  .drive-ui #route-options button {display:block;min-height:44px;padding:8px}
+  .drive-ui #race-hud {top:var(--hud-info-top);max-width:calc(100vw - var(--hud-left) - var(--hud-right));gap:12px;padding:8px 12px}
+  .drive-ui #race-hud > div {gap:4px}
+  .drive-ui #race-hud strong {font-size:17px}
+  .drive-ui #race-hud span {font-size:6px;letter-spacing:.7px}
+  .drive-ui #race-hud small {font-size:9px}
+  .drive-ui:has(#race-hud[style*="flex"]) #mp-hud {top:calc(var(--hud-info-top) + 64px)}
+  .drive-ui .drive-help,
+  .drive-ui #camera-name {display:none}
+}
+
+/* Wide touch screens have space for a single-row action bar. */
+@media (hover: none) and (pointer: coarse) and (min-width: 640px) {
+  .drive-ui {--map-size:116px;--dial-size:184px;--hud-info-top:calc(var(--hud-top) + 58px)}
+  .drive-ui .topbar > div:first-child {max-width:150px}
+  .drive-ui .topbar nav {
+    grid-template-columns:clamp(48px,7vw,68px) 70px repeat(3,clamp(48px,7vw,68px));
+    grid-template-rows:44px;
+    justify-content:end;
+    gap:4px;
+  }
+  .drive-ui .topbar button {grid-row:1;font-size:9px}
+  .drive-ui .topbar #autopilot-toggle {font-size:9px}
+  .drive-ui .topbar .hud-wallet {position:absolute;top:8px;left:50%;transform:translateX(-50%);max-width:100px}
+  .drive-ui #mp-hud {top:var(--hud-info-top);left:auto;right:var(--hud-right);max-width:180px}
+  .drive-ui:has(#race-hud[style*="flex"]) #mp-hud {top:calc(var(--hud-info-top) + 64px);right:calc(var(--hud-right) + var(--dial-size) + 12px)}
+  .drive-ui #route-choice {top:var(--hud-info-top);left:calc(var(--hud-left) + var(--map-size) + 14px);max-width:24vw}
+  .drive-ui:has(#route-choice:not([hidden])) #law-copy {position:absolute;top:52px;left:0;max-width:var(--map-size)}
+}
+@media (hover: none) and (pointer: coarse) and (max-height: 520px) {
+  .drive-ui {--map-size:94px;--dial-size:clamp(110px,36dvh,144px)}
+  .drive-ui:has(#touch-wheelie:not([hidden])) {--dial-size:clamp(96px,29dvh,120px)}
+  .drive-ui .instrument-status {bottom:8px;right:calc(100% + 8px);max-width:100px;width:max-content}
+}
+@media (hover: none) and (pointer: coarse) and (max-height: 360px) and (min-width: 640px) {
+  .drive-ui:has(#touch-wheelie:not([hidden])) #mp-hud {right:calc(var(--hud-right) + var(--dial-size) + 12px)}
+  .drive-ui:has(#route-choice:not([hidden])) #law-copy {top:48px;padding:4px 6px;gap:2px}
+  .drive-ui:has(#route-choice:not([hidden])) #law-detail {display:none}
+}

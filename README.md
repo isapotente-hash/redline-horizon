@@ -70,3 +70,9 @@ Validation for this update: 122 automated tests, TypeScript/build validation and
 ## Circular speedometer
 
 The driving instrument follows the supplied reference: a transparent circular dial, thin outer ring, open-bottom 0–12 RPM scale, continuous yellow sweep with an angular tip, red high-RPM band, centered gear, large speed and a simple unit label. Live readings retain km/h or mph settings and reverse indication. SVG geometry remains sharp at desktop and touch-screen sizes without a texture or extra asset request. Boost, drift and wheelie feedback sits outside the dial. Updates remain on the existing throttled HUD cadence, with no changes to vehicle gearing or physics.
+
+## Mobile driving HUD
+
+HUD overrides apply only to primary touch inputs (`hover: none` and `pointer: coarse`). Mobile action buttons show clean labels while preserving their existing handlers and toggle states. Coins stay centered at the top; location, enforcement and route notices have separate space. The map and dial are approximately 80% of their previous mobile size, with separate steering and pedal areas below them. All driving touch buttons are at least 48 × 48 px; the bike wheelie button uses a separate row with dial clearance. Insets respect device safe areas. Mouse/keyboard layouts retain their original styling, key hints and control labels, including narrow desktop windows.
+
+Validation: actual HUD rendering at 10 phone/tablet sizes in portrait and landscape, including cars, bikes, route choices, race overlays, multiplayer status, large balances, touch press/release and exit/entry labels. Four desktop viewport comparisons match the prior element bounds, font sizes and visible labels in driving, autopilot and on-foot states. Physics and engine source files are unchanged.
