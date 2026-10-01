@@ -92,22 +92,22 @@ export class TerrainSampler {
     const work=this.geometrySteps(x0,z0,size,n,lower);let next=work.next();while(!next.done)next=work.next();return next.value;
   }
   *geometrySteps(x0:number,z0:number,size:number,n:number,lower=0):Generator<void,T.BufferGeometry,void> {
-    const position:number[]=[],color:number[]=[],indices:number[]=[],c=new T.Color();
+    const position:number[]=[],color:number[]=[],uv:number[]=[],indices:number[]=[],c=new T.Color();
     const step=size/n;
     for(let j=0;j<=n;j++){yield;for(let i=0;i<=n;i++) {
       const x=x0+i*step,z=z0+j*step,h=this.height(x,z,step)-lower;
-      position.push(x,h,z);
+      position.push(x,h,z);uv.push(x*.32,z*.32);
       const road=this.roads.nearest(x,z),raw=this.roads.rawHeight(x,z);
       const rough=Math.abs(this.roads.rawHeight(x+4,z)-raw)+Math.abs(this.roads.rawHeight(x,z+4)-raw);
       const variation=.5+.5*Math.sin(x*.015+Math.sin(z*.032));
-      c.set(h<2?'#b6b1a0':rough>4?'#827e71':h>180?'#758070':variation>.5?'#6b7951':'#87916b');
-      if(road.distance<road.road.width/2+7)c.set('#98947d');
+      c.set(h<2?'#b6b1a0':rough>4?'#827e71':h>180?'#ada06a':variation>.5?'#c1a362':'#cab06f');
+      if(road.distance<road.road.width/2+7)c.set('#b49d65');
       const region=this.roads.region(x,z);
       if(region==='COPPER DUNES')c.set(variation>.5?'#c0a16c':'#ad8d58');
       else if(region==='DRY MESA')c.set(rough>3?'#ab7858':'#b69c74');
-      else if(region==='SUMMIT PEAKS')c.set(h>365?'#c4c8c4':rough>3?'#888d88':'#7c8974');
-      else if(region==='MORROW VALLEY')c.set(variation>.5?'#849559':'#647c48');
-      else if(region==='CEDAR SUBURBS'||region==='ZENITH INDUSTRIAL')c.set('#898f79');
+      else if(region==='SUMMIT PEAKS')c.set(h>365?'#c4c8c4':rough>3?'#888d88':'#aaa37e');
+      else if(region==='MORROW VALLEY')c.set(variation>.5?'#b7a361':'#c6b77c');
+      else if(region==='CEDAR SUBURBS'||region==='ZENITH INDUSTRIAL')c.set('#aaa080');
       c.multiplyScalar(.87+variation*.12);color.push(c.r,c.g,c.b);
     }
     }
@@ -115,6 +115,7 @@ export class TerrainSampler {
     const geometry=new T.BufferGeometry();
     geometry.setAttribute('position',new T.Float32BufferAttribute(position,3));
     geometry.setAttribute('color',new T.Float32BufferAttribute(color,3));
+    geometry.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
     geometry.setIndex(indices);geometry.computeVertexNormals();return geometry;
   }
 }

@@ -12,8 +12,13 @@ export function sweep(road:Road,start:number,end:number,profile:readonly (readon
   const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(vertices,3));g.setIndex(indices);g.computeVertexNormals();return g;
 }
 export function barrierGeometry(road:Road,start:number,end:number,side:number){
-  const o=side*(road.width/2+1.65),a=o-.12,b=o+.12;
-  return sweep(road,start,end,[[a,.12],[b,.12],[b,1.08],[a,1.08]],true);
+  const o=side*(road.width/2+1.65),a=o-.32,b=o+.32;
+  // A buried base and smooth vertical faces keep the solid boundary predictable.
+  // Stone relief belongs in the material, never in wheel-contact geometry.
+  const profile:[[number,number],[number,number],[number,number],[number,number]]=[[a,-.12],[b,-.12],[b,1.0],[a,1.0]];
+  const g=sweep(road,start,end,profile,true),uv:number[]=[];
+  for(let i=start;i<=end;i++)for(const [,h] of profile)uv.push(road.samples[i].d/3.2,h*.9);
+  g.setAttribute('uv',new T.Float32BufferAttribute(uv,2));g.name='Continuous dry stone wall';return g;
 }
 export function tunnelGeometry(road:Road,start:number,end:number){
   // Outward-facing wall and arch cross section. The open ends have no blocking caps.

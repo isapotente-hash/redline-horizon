@@ -1,9 +1,10 @@
 import * as T from 'three';
 
 /** World-space detail stays continuous across terrain chunk boundaries. */
-export function surfaceDetail<M extends T.MeshStandardMaterial>(material:M, kind:'ground'|'rock'|'bark'):M {
-  material.customProgramCacheKey=()=>`coastal-detail-v1-${kind}`;
+export function surfaceDetail<M extends T.MeshStandardMaterial>(material:M, kind:'ground'|'rock'|'bark',field?:T.Texture):M {
+  material.customProgramCacheKey=()=>`coastal-detail-v2-${kind}-${!!field}`;
   material.onBeforeCompile=shader=>{
+    if(field)shader.uniforms.detailFieldMap={value:field};
     shader.vertexShader=shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vDetailWorld;\nvarying vec3 vDetailLocal;');
     shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       vDetailLocal=transformed;
@@ -13,11 +14,16 @@ export function surfaceDetail<M extends T.MeshStandardMaterial>(material:M, kind
       #endif
       vDetailWorld=(modelMatrix*detailPosition).xyz;`);
     shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>
+      ${field?'uniform sampler2D detailFieldMap;':''}
       varying vec3 vDetailWorld;
       varying vec3 vDetailLocal;
       float detailHash(vec2 p){vec3 q=fract(vec3(p.xyx)*.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
       float detailNoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(detailHash(i),detailHash(i+vec2(1,0)),f.x),mix(detailHash(i+vec2(0,1)),detailHash(i+vec2(1,1)),f.x),f.y);}`);
-    const detail=kind==='ground' ? `
+    const detail=kind==='ground'&&field ? `
+      vec3 straw=texture2D(detailFieldMap,vDetailWorld.xz*.32).rgb;
+      float fieldPatch=detailNoise(vDetailWorld.xz*.19);
+      diffuseColor.rgb*=(.38+straw*.72)*(.69+fieldPatch*.49);`
+      :kind==='ground' ? `
       float soil=detailNoise(vDetailWorld.xz*.7);
       float grain=detailNoise(vDetailWorld.xz*7.);
       float fleck=detailNoise(vDetailWorld.xz*26.);

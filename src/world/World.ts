@@ -1,3 +1,5 @@
+import {asphaltMaterial,dryFieldTexture,dryStoneMaterial} from '../rendering/RuralMaterials';
+import {DryGrass} from './DryGrass';
 import {RegionalScenery} from "./RegionalScenery";
 import {yieldLoading} from "../core/Loading";
 import {barrierGeometry,tunnelGeometry,supportGeometry,structureRange} from "./CollisionGeometry";
@@ -20,6 +22,7 @@ type Chunk = {
   z: number;
   treeBatches: {foliage:T.InstancedMesh;wood:T.InstancedMesh;variant:number;nearFoliage:T.InstancedMesh;nearWood:T.InstancedMesh;transforms:T.Matrix4[];colors:T.Color[]}[];
   treeLod:number;
+  grass:T.InstancedMesh;
   obstacles:SceneryObstacle[];
   obstacleColliders:ReturnType<typeof sceneryCollider>[];
 };
@@ -28,6 +31,10 @@ export class World {
   roadsGroup = new T.Group();
   chunks = new Map<string, Chunk>();
   asphalt: T.MeshPhysicalMaterial;
+  readonly dryGrass=new DryGrass();
+  readonly stoneMaterial=dryStoneMaterial();
+  vergeMaterial:T.MeshStandardMaterial;
+  private readonly grassSectors:T.InstancedMesh[]=[];
   terrainMaterial = new T.MeshStandardMaterial({
     vertexColors: true,
     roughness: 1,
@@ -82,48 +89,13 @@ export class World {
   ) {
     this.terrainSampler = new TerrainSampler(network);
     this.regional=new RegionalScenery(network,this.terrainSampler);
-    surfaceDetail(this.terrainMaterial,"ground");
+    const field=dryFieldTexture();
+    surfaceDetail(this.terrainMaterial,"ground",field);this.terrainMaterial.bumpMap=field;this.terrainMaterial.bumpScale=.065;
     surfaceDetail(this.rockMaterial,"rock");
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 512;
-    const c = canvas.getContext("2d")!,
-      random = rng(344);
-    const data = c.createImageData(512, 512);
-    for (let i = 0; i < data.data.length; i += 4) {
-      const v = 69 + random() * 24;
-      data.data.set([v * 0.96, v, v * 1.02, 255], i);
-    }
-    c.putImageData(data, 0, 0);
-    c.strokeStyle = "#55585b";
-    c.lineWidth = 0.4;
-    for (let i = 0; i < 25; i++) {
-      c.beginPath();
-      let x = random() * 512,
-        y = random() * 512;
-      c.moveTo(x, y);
-      for (let j = 0; j < 10; j++) {
-        x += random() * 18 - 9;
-        y += random() * 24;
-        c.lineTo(x, y);
-      }
-      c.stroke();
-    }
-    const tex = new T.CanvasTexture(canvas);
-    tex.wrapS = tex.wrapT = T.RepeatWrapping;
-    tex.anisotropy = 16;
-    tex.colorSpace = T.SRGBColorSpace;
-    const relief = tex.clone();
-    relief.colorSpace = T.NoColorSpace;
-    this.asphalt = new T.MeshPhysicalMaterial({
-      color: "#92979b",
-      map: tex,
-      bumpMap: relief,
-      bumpScale: 0.045,
-      roughnessMap: relief,
-      roughness: 0.89,
-      clearcoat: 0,
-      metalness: 0.04,
-    });
+    this.vergeMaterial=surfaceDetail(new T.MeshStandardMaterial({name:'dry-grass-verge',color:'#bfa263',roughness:1,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2}),"ground",field);
+    surfaceDetail(this.regional.materials.field,"ground",field);this.regional.materials.field.bumpMap=field;this.regional.materials.field.bumpScale=.065;
+    this.asphalt=asphaltMaterial();this.dryGrass.update(settings);
+    const random=rng(344);
     this.root.add(this.roadsGroup, this.city);
     this.rockGeo = new T.IcosahedronGeometry(1, 2);
     const ra = this.rockGeo.getAttribute("position");
@@ -160,17 +132,20 @@ export class World {
   }
   *buildRoads() {
     const concrete = new T.MeshStandardMaterial({
-        color: "#9b9b91",
+        color: "#8f8b80",
         roughness: 0.9,
       }),
-      white = new T.MeshStandardMaterial({ color: "#dcdcd0", roughness: 0.75 }),
-      yellow = new T.MeshStandardMaterial({ color: "#c4a84e", roughness: 0.7 });
+      white = new T.MeshStandardMaterial({ name:"solid-white-road-markings",color: "#f0f0e7", roughness: 0.85,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-20 });
     for (const road of this.network.roads) {
       const n = road.samples.length - 1;
       const pavement=this.asphalt.clone();
       // Deterministic depth bias resolves coplanar intersection surfaces without physical steps.
       pavement.polygonOffset=true;pavement.polygonOffsetFactor=-1;pavement.polygonOffsetUnits=-1-this.network.roads.indexOf(road);
-      const junction=(x:number,z:number)=>this.network.inJunction(x,z);
+      const junction=(x:number,z:number)=>{
+        if(!this.network.inJunction(x,z))return false;
+        for(const other of this.network.roads)if(other!==road&&this.network.nearest(x,z,false,other).distance<other.width/2+.5)return true;
+        return false;
+      };
       // One connected support mesh per road; sector boundaries are rendering-only.
       const support=supportGeometry(road,this.terrainSampler);this.physics.mesh(support);support.dispose();
       for (let i = 0; i < n; i += 80) {
@@ -188,7 +163,7 @@ export class World {
               else positions.setY(v,Math.min(sample.p.y-.05,this.terrainSampler.groundHeight(x,z)));
             }
           }
-          verge.computeVertexNormals();this.mesh(verge,new T.MeshStandardMaterial({color:this.network.region(road.samples[i].p.x,road.samples[i].p.z).match(/DUNES|MESA/)?'#a59470':'#7c8961',roughness:1,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2}));
+          verge.computeVertexNormals();this.mesh(verge,this.vergeMaterial);
         }
         for (const s of [-1, 1]) {
           this.mesh(
@@ -197,7 +172,7 @@ export class World {
               i,
               end,
               s * (road.width / 2),
-              s * (road.width / 2 + 2.3),
+              s * (road.width / 2 + .45),
               0,
             ),
             concrete,
@@ -215,44 +190,45 @@ export class World {
             white,
           ).material.side = T.DoubleSide;
         }
-        if (road === this.network.main) {
-          for (const s of [-1, 1])
-            this.mesh(
-              roadRibbon(road, i, end, s * 0.1, s * 0.2, 0.017, junction),
-              yellow,
-            ).material.side = T.DoubleSide;
+        for(const side of [-1,1])this.mesh(roadRibbon(road,i,end,side*(road.width/2+.45),side*(road.width/2+2.3)),this.vergeMaterial);
+        const centerLine=this.mesh(roadRibbon(road,i,end,-.085,.085,.018,junction),white);
+        centerLine.name='Single solid white centre line';
+        const grass=this.dryGrass.batch((end-i+1)*6),random=rng(i*917+this.network.roads.indexOf(road)*1177);
+        for(let sample=i;sample<end;sample+=2){
+          const a=road.samples[sample];
+          if(this.network.inJunction(a.p.x,a.p.z,8)||structureRange(this.network,road,a.d))continue;
+          for(const side of [-1,1])for(let tuft=0;tuft<3;tuft++){
+            const p=a.p.clone().addScaledVector(a.t,(tuft-1)*1.35).addScaledVector(a.r,side*(road.width/2+.91));
+            const grade=a.p.y+a.t.y*(tuft-1)*1.35;
+            // Check other crossing roads as well as the local pavement edge.
+            const hit=this.network.nearest(p.x,p.z);
+            if(hit.distance<hit.road.width/2+.55)continue;
+            this.dryGrass.plant(grass,p.x,grade,p.z,random()*6.28,.65+random()*.3);
+          }
+          // Root extra field tufts on the actual shoulder ribbon beyond the wall.
+          // Its cross-section is linear between the road grade and outer terrain edge.
+          for(const side of [-1,1]){
+            const outer=a.p.clone().addScaledVector(a.r,side*(road.width/2+14));
+            const edgeHeight=Math.min(a.p.y-.05,this.terrainSampler.groundHeight(outer.x,outer.z));
+            for(const offset of [2.9,4.4,6.4]){
+              const p=a.p.clone().addScaledVector(a.r,side*(road.width/2+offset)),hit=this.network.nearest(p.x,p.z);
+              if(hit.distance<hit.road.width/2+.55)continue;
+              const height=lerp(a.p.y,edgeHeight,(offset-2.3)/11.7);
+              this.dryGrass.plant(grass,p.x,height,p.z,random()*6.28,.8+random()*.5);
+            }
+          }
         }
+        grass.computeBoundingSphere();sector.add(grass);this.grassSectors.push(grass);
         const center=road.samples[Math.floor((i+end)/2)].p.clone();
         this.roadSectors.push({group:sector,center,radius:road.samples[end].d-road.samples[i].d});
         this.roadsGroup=oldGroup;yield;
       }
-      const stripe = new T.InstancedMesh(
-        new T.PlaneGeometry(0.12, 4.3),
-        white,
-        Math.ceil(road.length / 18) * (road.width > 14 ? 2 : 1),
-      );
-      let idx = 0;
-      for (let d = 0; d < road.length; d += 18) {
-        const a = this.network.at(road, d);
-        if(junction(a.p.x,a.p.z))continue;
-        for (const lane of road.width > 14 ? [-4, 4] : [0]) {
-          this.dummy.position.copy(a.p).addScaledVector(a.r, lane);
-          this.dummy.position.y += 0.018;
-          this.dummy.quaternion.setFromRotationMatrix(this.basis.makeBasis(a.r,a.t,this.up.crossVectors(a.r,a.t).normalize()));
-          this.dummy.scale.set(1, 1, 1);
-          this.dummy.updateMatrix();
-          stripe.setMatrixAt(idx++, this.dummy.matrix);
-        }
-      }
-      stripe.count = idx;
-      stripe.receiveShadow = true;
-      this.roadsGroup.add(stripe);
-      // Continuous grade-following guardrails with no overlapping end faces.
+      // Continuous grade-following dry stone walls; junctions and tunnel portals stay open.
       if(road===this.network.main||["SILVER CANYON","SUMMIT PASS","SUNSET EXPRESSWAY","SOUTH COAST"].includes(road.name)){
         let first=-1;
         const flush=(end:number)=>{if(first<0||end<=first){first=-1;return;}for(const side of [-1,1]){
-          const geometry=barrierGeometry(road,first,end,side),mesh=this.mesh(geometry,this.guardMaterial);
-          mesh.castShadow=true;this.physics.mesh(geometry);const center=road.samples[Math.floor((first+end)/2)].p.clone();
+          const geometry=barrierGeometry(road,first,end,side),mesh=this.mesh(geometry,this.stoneMaterial);
+          mesh.name='Roadside dry stone wall';mesh.castShadow=true;this.physics.mesh(geometry);const center=road.samples[Math.floor((first+end)/2)].p.clone();
           this.roadSectors.push({group:mesh,center,radius:(road.samples[end].d-road.samples[first].d)/2+20});
         }first=-1;};
         for(let i=0;i<n;i++){
@@ -303,8 +279,9 @@ export class World {
     const work=this.chunkSteps(x,z);let next=work.next();while(!next.done)next=work.next();return next.value;
   }
   private *chunkSteps(x:number,z:number):Generator<void,Chunk,void> {
+    const grass=yield* this.dryGrass.field(x,z,this.network,this.terrainSampler);
     const group=new T.Group(),g=yield* this.terrainSampler.geometrySteps(x*256,z*256,256,24);
-    this.mesh(g,this.terrainMaterial,group);
+    this.mesh(g,this.terrainMaterial,group);group.add(grass);
     const r=rng((x*73856093)^(z*19349663));
     const treeBatches=this.treeVariants.map((variant,i)=>({variant:i,foliage:new T.InstancedMesh(variant.far.foliage,this.treeMaterial,96),wood:new T.InstancedMesh(variant.far.wood,this.trunkMaterial,96),nearFoliage:new T.InstancedMesh(variant.near.foliage,this.treeMaterial,96),nearWood:new T.InstancedMesh(variant.near.wood,this.trunkMaterial,96),transforms:[] as T.Matrix4[],colors:[] as T.Color[]}));
     const obstacles:SceneryObstacle[]=[];
@@ -333,13 +310,14 @@ export class World {
     }
     treeBatches.forEach((b,i)=>{b.foliage.count=b.wood.count=counts[i];b.nearFoliage.count=b.nearWood.count=0;b.nearFoliage.visible=b.nearWood.visible=false;for(const mesh of [b.foliage,b.wood,b.nearFoliage,b.nearWood])mesh.castShadow=mesh.receiveShadow=true;group.add(b.foliage,b.wood,b.nearFoliage,b.nearWood)});
     rocks.count=nr;rocks.castShadow=rocks.receiveShadow=true;group.add(rocks,this.regional.build(x,z,obstacles));this.root.add(group);
-    const chunk:Chunk={group,geometry:g,x,z,treeBatches,treeLod:1,obstacles,obstacleColliders:[]};this.chunks.set(`${x},${z}`,chunk);return chunk;
+    const chunk:Chunk={group,geometry:g,x,z,treeBatches,treeLod:1,grass,obstacles,obstacleColliders:[]};this.chunks.set(`${x},${z}`,chunk);return chunk;
   }
   update(p: T.Vector3, force = false, view=p) {
     const now=performance.now(),settingsKey=`${this.settings.quality}:${this.settings.renderDistance}:${this.settings.simulationDistance}`;
     const changed=settingsKey!==this.updateSettings;
     if(!force&&!changed&&now-this.lastUpdate<100)return;
     this.lastUpdate=now;this.updateSettings=settingsKey;
+    this.dryGrass.update(this.settings);
     const updateLod=force||changed||this.lastLod.distanceToSquared(p)>64;
     const cx = Math.floor(p.x / 256),
       cz = Math.floor(p.z / 256),
@@ -369,6 +347,7 @@ export class World {
           for(const mesh of [batch.foliage,batch.wood,batch.nearFoliage,batch.nearWood]){mesh.visible=mesh.count>0;mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;mesh.boundingSphere=null;}
         }
       }
+      c.grass.visible=this.dryGrass.visible(c.grass,view);
       c.group.visible=Math.hypot(c.x-vx,c.z-vz)<=this.visualRadius+.7;
       if (d <= this.settings.simulationDistance/256 && !c.collider) {
         c.collider = this.physics.mesh(c.geometry);
@@ -394,13 +373,14 @@ export class World {
     if(needed.length===0)this.buildFarTerrain(view);
     const range=this.settings.renderDistance;
     for(const sector of this.roadSectors)sector.group.visible=sector.center.distanceToSquared(view)<(range+sector.radius)**2;
+    for(const grass of this.grassSectors)grass.visible=this.dryGrass.visible(grass,view);
     this.city.visible=view.distanceToSquared(this.cityCenter)<(range+1300)**2;
     const wet = this.settings.weather === "rain" ? 1 : 0;
     if (wet !== this.wet) {
       this.wet = wet;
-      this.asphalt.roughness = lerp(0.89, 0.19, wet);
+      this.asphalt.roughness = lerp(0.94, 0.28, wet);
       this.asphalt.clearcoat = wet * 0.85;
-      this.asphalt.color.set(wet ? "#676e78" : "#92979b");
+      this.asphalt.color.set(wet ? "#979995" : "#c1beb7");
       this.roadsGroup.traverse(o=>{if(o instanceof T.Mesh&&o.material instanceof T.MeshPhysicalMaterial){o.material.roughness=this.asphalt.roughness;o.material.clearcoat=this.asphalt.clearcoat;o.material.color.copy(this.asphalt.color)}});
     }
   }

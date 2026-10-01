@@ -87,3 +87,13 @@ Validation: actual HUD rendering at 10 phone/tablet sizes in portrait and landsc
 - Recognized mobile controls still map to the same WASD/Space actions. Touch release, cancellation and lost pointer capture clear held inputs. Desktop keyboard/mouse/gamepad bindings are preserved.
 
 Validation: 132 automated physics/state/input/camera regressions; TypeScript and Vite build; GLB/WASM release integrity; ten mobile/tablet HUD/leaderboard viewports; four unchanged desktop driving layouts; explicit touch-enabled Windows/Mac/Linux desktop isolation; production startup and saved-lap reload checks. These checks do not measure GPU FPS across all hardware or prove zero bugs.
+
+
+## Rural environment surfaces
+
+- Neutral grey asphalt uses a shared 512px aggregate albedo and subtle relief. A single solid white centre line replaces the double yellow and dashed lane markers; paint has explicit depth ordering so it remains continuous over grades. True road junctions retain clear markings. Road layouts, lane following and vehicle controls are preserved.
+- Dry brown/gold terrain and roadside grass use a world-aligned straw texture and bump relief, continuous across streamed chunk seams. Shared tapered 3D clumps add nearby field and verge detail. Grass stays outside pavement, is omitted from bridge/tunnel decks and crossing lanes, and fades/culls by quality and distance. Lower settings reduce field density.
+- Rural metallic rail surfaces are replaced by low dry stone walls with irregular rubble joints, upright coping, grain and bump relief. The same continuous grade-following geometry provides solid collision: textured stone detail never introduces wheel-contact spikes. Urban sign hardware, legitimate tunnel boundaries and junction openings are retained.
+- All surface textures are generated once at startup, use mipmaps and bounded dimensions, and need no new asset downloads. Grass geometry/materials are shared across instanced batches; streamed batches are disposed with their chunks. No UI, vehicle model, save namespace or driving-control changes are included.
+
+Validation: full regression suite, shader/render checks at noon and late afternoon, terrain/UV seams, texture bounds, grass clearance/culling, 24,264 clear-lane sweeps, both tunnel boundaries, all eight vehicle types through the coastal tunnel in both directions, high-speed edge impacts and bounded world streaming.
