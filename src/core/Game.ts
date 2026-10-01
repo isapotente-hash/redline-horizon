@@ -1,4 +1,5 @@
 import { OnFootPlayer } from "../player/OnFootPlayer";
+import {SlipstreamSystem} from '../vehicles/SlipstreamSystem';
 import { PhysicsClock } from "./PhysicsClock";
 import {yieldLoading,finishStartup,loadingProgress} from "./Loading";
 import {DevTools} from './DevTools';
@@ -33,6 +34,7 @@ import { AudioManager } from "../audio/AudioManager";
 import { Particles } from "../effects/Particles";
 import { UI, State } from "../ui/UI";
 import { clamp, damp } from "./math";
+const noTraffic=[] as const;
 const stopped: Controls = {
   throttle: 0,
   brake: 1,
@@ -67,6 +69,7 @@ export class Game {
   coins!: CoinManager;
   rewards = new DrivingRewards(this.save);
   lastCrash=0;
+  private readonly slipstream=new SlipstreamSystem();private recordedLapSerial=0;
   police!:PoliceManager;
   lastPoliceMessage=0;
   vehicle!: VehiclePhysics;
@@ -294,6 +297,7 @@ export class Game {
     if (state === "garage" && this.state!=="workshop") this.garagePrevious = this.state;
     this.previous = this.state;
     this.state = state;
+    if(state!=='drive'){this.slipstream.reset();if(this.vehicle)this.vehicle.slipstreamStrength=0;}
     if(state!=='drive')this.playerContacts?.clear();
     this.ui.setState(state);
     this.input.clear();
@@ -430,6 +434,9 @@ export class Game {
       case "statistics":
         if(this.state==="menu")this.setState("statistics");
         break;
+      case "leaderboard":
+        if(this.state==='menu')this.setState('leaderboard');
+        break;
       case "settings":
         this.setState("settings");
         break;
@@ -458,7 +465,7 @@ export class Game {
         break;
       case "back":
         this.setState(
-          this.state === "statistics" ? "menu" : this.state === "settings"
+          this.state === "statistics"||this.state==='leaderboard' ? "menu" : this.state === "settings"
             ? this.settingsPrevious
             : this.state === "workshop" ? "garage"
             : this.state === "controls"
@@ -507,7 +514,7 @@ export class Game {
       else if(this.state==='multiplayer')void this.action('mp-back');
       else if (["pause", "map", "photo"].includes(this.state))
         void this.action("resume");
-      else if (["statistics", "settings", "controls", "garage", "workshop"].includes(this.state))
+      else if (["statistics", "leaderboard", "settings", "controls", "garage", "workshop"].includes(this.state))
         void this.action("back");
     }
     if (this.input.take("F3")) this.debug = !this.debug;
@@ -642,6 +649,8 @@ export class Game {
           (this.race.active && this.race.countdown > 0)
             ? stopped
             : this.autopilot.enabled ? this.autopilot.controls(this.vehicle, Math.min(this.save.settings.autopilotSpeed,this.police.limit?this.police.limit-2:Infinity), this.save.settings.autopilotMode, controls, navigation, step) : controls;
+        this.slipstream.update(step,this.vehicle,input,this.race.networkRace?noTraffic:this.race.active?this.race.ai.cars:this.traffic.active?this.traffic.cars:noTraffic,this.remotes,now);
+        if(this.race.active&&this.race.countdown<=0&&this.autopilot.enabled)this.race.assistUsed=true;
         this.vehicle.preStep(input, step);
         this.traffic.update(
           step,
@@ -652,6 +661,10 @@ export class Game {
           this.camera.mode===6?this.camera.freePosition:this.vehicle.position,
         );
         this.race.update(step, this.vehicle);
+        if(this.race.lapSerial!==this.recordedLapSerial){
+          this.recordedLapSerial=this.race.lapSerial;
+          this.save.recordLap(this.race.lastLapTime,this.save.selectedCar,this.race.lastLapNumber,this.race.lastLapAssisted,this.race.networkRace);
+        }
         this.playerContacts.update(now-this.physicsClock.accumulator*1000,this.network.connected&&!this.network.ghost,this.remotes);
         this.physics.world.step(undefined,this.playerContacts.hooks);
         this.vehicle.postStep(this.physicsClock.step);

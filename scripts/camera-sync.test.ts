@@ -60,3 +60,18 @@ test('disconnecting and reconnecting a held gamepad button generates a new actio
  const controls=new InputManager();const pad={connected:true,id:'test',axes:[0],buttons:Array.from({length:10},(_,i)=>({pressed:i===3,value:i===3?1:0}))};
  pads=[pad];controls.read(1/60);assert.equal(controls.take('KeyC'),true);pads=[];controls.read(1/60);pads=[pad];controls.read(1/60);assert.equal(controls.take('KeyC'),true);
 });
+test('camera spring is frame independent; speed and boost FOV rise, shake stays bounded and fully decays',()=>{
+ const endpoints:T.Vector3[]=[];
+ for(const hz of [30,60,144]){
+  const {rig,camera,visual,car}=fixture();Object.assign(car,{surface:'ASPHALT',contacts:4,impact:0,boostSerial:0,crashSerial:0});rig.update(0,car,visual,'drive',0,input);
+  visual.rotation.y=Math.PI/2;for(let i=0;i<hz;i++)rig.update(1/hz,car,visual,'drive',i/hz,input);endpoints.push(camera.position.clone());rig.dispose();
+ }
+ assert.ok(endpoints[0].distanceTo(endpoints[1])<1e-8);assert.ok(endpoints[1].distanceTo(endpoints[2])<1e-8);
+ const {rig,camera,visual,car}=fixture();Object.assign(car,{speed:0,surface:'ASPHALT',contacts:4,impact:0,boostSerial:0,crashSerial:0,boosting:false});rig.update(0,car,visual,'drive',0,input);const slow=camera.fov;
+ car.speed=85;for(let i=0;i<180;i++)rig.update(1/60,car,visual,'drive',i/60,input);assert.ok(camera.fov>slow+15);const fast=camera.fov,base=camera.position.clone();
+ Object.assign(car,{boosting:true,boostSerial:1,surface:'GRAVEL'});let motion=0;
+ for(let i=0;i<180;i++){rig.update(1/60,car,visual,'drive',i/60,input);motion=Math.max(motion,camera.position.distanceTo(base));}
+ assert.ok(camera.fov>fast+2.5);assert.ok(motion>.005&&motion<.065,`bounded shake ${motion}`);
+ Object.assign(car,{boosting:false,surface:'ASPHALT',impact:0});for(let i=0;i<180;i++)rig.update(1/60,car,visual,'drive',i/60,input);assert.ok(camera.position.distanceTo(base)<1e-6,'vibration must not accumulate in the spring history');
+ Object.assign(car,{crashSerial:1,crashSeverity:1,impact:1});rig.update(1/60,car,visual,'drive',0,input);assert.ok(camera.position.distanceTo(base)<.065);rig.setMode(6);rig.update(1/60,car,visual,'drive',0,input);const free=camera.position.clone();rig.update(1/60,car,visual,'drive',0,input);assert.ok(camera.position.distanceTo(free)<1e-8);rig.dispose();
+});

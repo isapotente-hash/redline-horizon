@@ -17,6 +17,7 @@ export class RemoteVehicle {
   private targetRotation = new T.Quaternion();
   private marker: T.Mesh;
   latest?: Pose;
+  speed=0;receivedAt=-Infinity;
   constructor(color=0x65fff1) {
     this.root.name = 'REMOTE_PLAYER'; this.root.visible = false;
     this.marker = new T.Mesh(new T.ConeGeometry(.32,.65,4), new T.MeshBasicMaterial({color}));
@@ -26,7 +27,10 @@ export class RemoteVehicle {
   receive(pose: Pose, now = performance.now()) {
     this.latest = pose;
     const previous = this.queue[this.queue.length-1];
-    if (previous && (previous.pose.car !== pose.car || new T.Vector3(...pose.p).distanceToSquared(new T.Vector3(...previous.pose.p)) > 6400)) this.queue.length = 0;
+    const delta=previous?Math.hypot(pose.p[0]-previous.pose.p[0],pose.p[2]-previous.pose.p[2]):0,seconds=previous?(now-previous.at)/1000:0;
+    this.speed=previous&&seconds>0&&seconds<=.5&&delta<=80&&previous.pose.car===pose.car?T.MathUtils.clamp(delta/seconds,0,140):0;
+    this.receivedAt=now;
+    if (previous && (previous.pose.car !== pose.car || delta*delta+(pose.p[1]-previous.pose.p[1])**2 > 6400)) this.queue.length = 0;
     this.queue.push({pose, at:now});
     if (this.queue.length > 8) this.queue.shift();
     if (!this.models.has(pose.car)) {
@@ -71,5 +75,5 @@ export class RemoteVehicle {
     rotation.fromArray(a.pose.q).normalize(); this.targetRotation.fromArray(b.pose.q).normalize(); rotation.slerp(this.targetRotation,alpha);
     return true;
   }
-  reset() { this.root.visible=false; this.queue.length=0; this.latest=undefined; }
+  reset() { this.root.visible=false; this.queue.length=0; this.latest=undefined;this.speed=0;this.receivedAt=-Infinity; }
 }

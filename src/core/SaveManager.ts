@@ -1,6 +1,7 @@
 import { SAVE_KEY, BACKUP_KEY, SAVE_VERSION, readSave, record } from "./SaveStorage";
 import { CARS, carSpec } from "../vehicles/CarCatalog";
 import { Loadout, STOCK, UPGRADES, UPGRADE_SLOTS } from "../vehicles/UpgradeCatalog";
+import {LapRecord,MAX_LAP_RECORDS,validLapRecords} from '../racing/LapRecords';
 export type Settings = {
   adaptiveResolution:boolean;
   renderDistance: number;
@@ -122,6 +123,13 @@ export class SaveManager {
   get car() { return carSpec(this.selectedCar); }
   legacyRecords:Record<string,unknown>={};
   bestByLaps:Record<number,number>={};
+  lapRecords:LapRecord[]=[];
+  recordLap(time:number,carId:string,lap:number,assisted=false,multiplayer=false):boolean {
+    if(!Number.isFinite(time)||time<=0||time>21600||!Number.isInteger(lap)||lap<1||lap>3||!CARS.some(c=>c.id===carId))return false;
+    this.lapRecords.push({time,carId,date:Date.now(),lap,assisted,multiplayer});
+    this.lapRecords.sort((a,b)=>a.time-b.time||a.date-b.date);this.lapRecords.length=Math.min(this.lapRecords.length,MAX_LAP_RECORDS);
+    this.save();return true;
+  }
   best = 0;
   distance = 0;
   position: { x: number; y: number; z: number; yaw: number } | null = null;
@@ -139,6 +147,9 @@ export class SaveManager {
         this.bestByLaps={1:this.best,3:nonnegative(a.bestByLaps?.[3])};
         this.legacyRecords=record(a.legacyRecords)?a.legacyRecords:{};
         if(a.layoutVersion!==2 && this.best>0){this.legacyRecords['original-circuit']={best:this.best,bestByLaps:this.bestByLaps};this.best=0;this.bestByLaps={};}
+        this.lapRecords=a.layoutVersion===2?validLapRecords(a.lapRecords,CARS.map(c=>c.id)):[];
+        // Only a one-lap record from the current circuit can become an imported lap.
+        if(a.layoutVersion===2&&!Array.isArray(a.lapRecords)&&this.best>0&&this.best<=21600)this.lapRecords=[{time:this.best,carId:'vanta',date:0,lap:1,assisted:false,multiplayer:false,imported:true}];
         this.distance = nonnegative(a.distance);
         this.position = record(a.position)&&['x','y','z','yaw'].every(k=>Number.isFinite(a.position[k]))
           ? {x:a.position.x,y:a.position.y,z:a.position.z,yaw:a.position.yaw} : null;
@@ -168,7 +179,7 @@ export class SaveManager {
         coins:this.coins,ownedCars:[...this.ownedCars],selectedCar:this.selectedCar,
         collectedCoins:[...this.collectedCoins],unlockedTracks:this.unlockedTracks,
         loadouts:this.loadouts,ownedUpgrades:this.ownedUpgrades,rewardMeters:this.rewardMeters,
-        settings:this.settings,best:this.best,bestByLaps:this.bestByLaps,
+        settings:this.settings,best:this.best,bestByLaps:this.bestByLaps,lapRecords:this.lapRecords,
         layoutVersion:2,legacyRecords:this.legacyRecords,distance:this.distance,
         statistics:this.statistics,position:this.position,
       });

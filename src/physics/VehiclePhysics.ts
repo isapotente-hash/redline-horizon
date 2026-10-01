@@ -6,6 +6,7 @@ import { clamp, damp, lerp } from "../core/math";
 import { Settings } from "../core/SaveManager";
 import { Controls } from "../input/InputManager";
 import { RoadNetwork, Road } from "../world/RoadNetwork";
+import {DriftSystem} from '../vehicles/DriftSystem';
 export const R = RAPIER;
 export class PhysicsWorld {
   world!: RAPIER.World;
@@ -108,8 +109,13 @@ export class VehiclePhysics {
   forward = new T.Vector3(0, 0, -1);
   right = new T.Vector3(1, 0, 0);
   boostRemaining = 0;
+  nitroRemaining=0;boostSerial=0;slipstreamStrength=0;
+  readonly drift=new DriftSystem();
+  private lastHandbrake=false;private lastSteer=0;
+  get boosting(){return this.boostRemaining>0||this.nitroRemaining>0;}
   infiniteBoost = false;
-  activateBoost() { this.boostRemaining = 5; }
+  activateBoost() { this.boostRemaining = 5;this.boostSerial++; }
+  activateNitro() {this.nitroRemaining=2.2;this.boostSerial++;}
   speed = 0;
   signedSpeed = 0;
   rpm = 850;
@@ -123,6 +129,14 @@ export class VehiclePhysics {
   distance = 0;
   driftScore = 0;
   impact = 0;
+  scrape=0;private scrapeTick=0;
+  private readonly scrapeManifold=(m:RAPIER.TempContactManifold)=>{
+    if(m.numSolverContacts()>0&&Math.abs(m.normal().y)<.45)this.scrape=Math.max(this.scrape,clamp(this.speed/55,0,1));
+  };
+  private readonly scrapeContact=(other:RAPIER.Collider)=>{
+    if(other.isSensor())return;const body=other.parent();if(body&&!body.isFixed())return;
+    this.physics.world.contactPair(this.collider,other,this.scrapeManifold);
+  };
   shiftTimer = 0;
   braking = 0;
   throttle = 0;
@@ -202,6 +216,7 @@ export class VehiclePhysics {
     this.forward.set(0, 0, -1).applyQuaternion(q);
     this.right.set(1, 0, 0).applyQuaternion(q);
     this.boostRemaining = 0;
+    this.nitroRemaining=0;this.slipstreamStrength=0;this.scrape=0;this.drift.reset();
     this.wheelie=this.lean=0;
     this.crashCooldown=.5;this.impact=0;this.beforeVelocity.set(0,0,0);
     this.speed = 0;
@@ -231,6 +246,7 @@ export class VehiclePhysics {
   }
   preStep(input: Controls, dt: number) {
     this.boostRemaining = this.infiniteBoost ? 5 : Math.max(0,this.boostRemaining-dt);
+    this.nitroRemaining=Math.max(0,this.nitroRemaining-dt);this.lastHandbrake=input.handbrake;this.lastSteer=input.steer;
     this.previousPosition.copy(this.position);
     this.previousRotation.copy(this.rotation);
     const b = this.body,
@@ -287,7 +303,7 @@ export class VehiclePhysics {
         0.9) /
         this.chassis.radius) *
       input.throttle *
-      (1 - clamp((this.speed - (this.spec.topSpeed + this.tune.engineSpeed + this.tune.gearingSpeed + (this.boostRemaining > 0 ? 23 : 0))) / 4, 0, 1));
+      (1 - clamp((this.speed - (this.spec.topSpeed + this.tune.engineSpeed + this.tune.gearingSpeed + (this.nitroRemaining>0?26:this.boostRemaining>0?23:0)+5*this.slipstreamStrength)) / 4, 0, 1));
     force *= this.spec.power * this.tune.enginePower * this.chassis.forceScale;
     if(off && this.spec.kit==='pickup')grip*=1.65;
     if(off && this.spec.kit==='sportbike')grip*=.82;
@@ -306,7 +322,7 @@ export class VehiclePhysics {
     b.resetForces(true);
     b.resetTorques(true);
     const drag =
-        0.5 * 1.225 * 0.32 * 1.95 * this.chassis.dragScale * this.speed * this.speed +
+        0.5 * 1.225 * 0.32 * 1.95 * this.chassis.dragScale * this.speed * this.speed * (1-.32*this.slipstreamStrength) +
         (this.speed > 0.05 ? 145*this.chassis.mass/1550*this.tune.rolling : 0) +
         (off ? 38 * this.chassis.mass/1550 * this.speed : 0),
       sign = Math.sign(this.signedSpeed);
@@ -318,9 +334,13 @@ export class VehiclePhysics {
       },
       true,
     );
-    if (this.boostRemaining > 0 && this.contacts >= 2 && !off && !this.reverse && input.brake < .1 && !input.handbrake && this.signedSpeed >= 0) {
-      const thrust = 10500 * this.chassis.mass/1550 * (1 - clamp((this.speed - (this.spec.topSpeed + this.tune.engineSpeed + this.tune.gearingSpeed + 20)) / 7, 0, 1));
+    if (this.boosting && this.contacts >= 2 && !off && !this.reverse && input.brake < .1 && !input.handbrake && this.signedSpeed >= 0) {
+      const thrust = 10500 * (this.nitroRemaining>0?1.45:1) * this.chassis.mass/1550 * (1 - clamp((this.speed - (this.spec.topSpeed + this.tune.engineSpeed + this.tune.gearingSpeed + (this.nitroRemaining>0?26:20))) / 7, 0, 1));
       b.addForce({ x: this.forward.x * thrust, y: 0, z: this.forward.z * thrust }, true);
+    }
+    if(this.slipstreamStrength>0&&this.contacts>=2&&!off&&!this.reverse&&input.throttle>0&&input.brake<.1&&!input.handbrake){
+      const pull=this.chassis.mass*1.2*this.slipstreamStrength*clamp((this.spec.topSpeed+this.tune.engineSpeed+this.tune.gearingSpeed+5-this.speed)/5,0,1);
+      b.addForce({x:this.forward.x*pull,y:0,z:this.forward.z*pull},true);
     }
     if(this.bike) {
       const a=b.angvel(),mass=this.chassis.mass;
@@ -348,6 +368,13 @@ export class VehiclePhysics {
         true,
       );
     }
+    // Progressive rear grip and physical yaw damping arrest a developing spin while
+    // retaining the entry slide. Short handbrake flicks keep their original response.
+    const driftRecovery=!this.bike&&input.handbrake?clamp((Math.abs(this.slip)-.18)/.4,0,1):0;
+    if(driftRecovery>0&&this.contacts>=3){
+      const yaw=this.body.angvel().y;
+      b.addTorque({x:0,y:-(yaw*12+this.slip*35)*this.chassis.mass*driftRecovery,z:0},true);
+    }
     for (let i = 0; i < 4; i++) {
       this.setWheelValue(0,i,14000*this.chassis.mass/1550*(this.bike&&i<2?1-clamp(this.wheelie/.12,0,1):1));
       this.setWheelValue(1,i, i >= 2 ? force / 2 : 0);
@@ -358,7 +385,7 @@ export class VehiclePhysics {
       );
       this.setWheelValue(4,
         i,
-        grip * (i>=2?this.tune.rearGrip*lerp(1,this.tune.brakeRearGrip,this.braking):1) * (input.handbrake && i >= 2 ? 0.28 : 1),
+        grip * (i>=2?this.tune.rearGrip*lerp(1,this.tune.brakeRearGrip,this.braking):1) * (input.handbrake && i >= 2 ? lerp(.28,.68,driftRecovery) : 1),
       );
       this.setWheelValue(5,
         i,
@@ -395,6 +422,8 @@ export class VehiclePhysics {
     this.contacts = 0;
     for (let i = 0; i < 4; i++)
       if (this.controller.wheelIsInContact(i)) this.contacts++;
+    this.scrape*=Math.exp(-10*dt);this.scrapeTick=(this.scrapeTick+1)&1;
+    if(this.scrapeTick===0&&this.speed>15&&this.contacts>=2)this.physics.world.contactPairsWith(this.collider,this.scrapeContact);
     const delta=Math.hypot(v.x-this.beforeVelocity.x,v.y-this.beforeVelocity.y,v.z-this.beforeVelocity.z);
     if(this.crashCooldown===0 && delta>2.5) {
       let solidContact=false;
@@ -409,5 +438,6 @@ export class VehiclePhysics {
     this.distance += this.speed * dt;
     if (this.contacts > 2 && this.speed > 10 && Math.abs(this.slip) > 0.17)
       this.driftScore += Math.abs(this.slip) * this.speed * dt * 10;
+    if(this.drift.update(dt,this,this.lastHandbrake,this.lastSteer))this.activateNitro();
   }
 }

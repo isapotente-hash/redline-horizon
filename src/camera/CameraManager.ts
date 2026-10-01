@@ -6,6 +6,13 @@ export const cameraNames = ["CHASE","WIDE CHASE","BUMPER","HOOD","COCKPIT","ORBI
 const CAR_SEATS = [[0,.1,-2.36],[0,.34,-1.33],[-.44,.53,-.06]];
 const BIKE_SEATS = [[0,.15,-1.08],[0,.6,-.65],[0,1.4,-.26]];
 const PICKUP_SEATS = [[0,.25,-2.55],[0,.65,-1.55],[-.48,1,-.35]];
+/** Exact critically damped spring; scratch velocity is relative to car translation. */
+function spring(p:T.Vector3,target:T.Vector3,v:T.Vector3,dt:number){
+  const w=16,e=Math.exp(-w*dt),x=p.x-target.x,y=p.y-target.y,z=p.z-target.z;
+  const jx=v.x+w*x,jy=v.y+w*y,jz=v.z+w*z;
+  p.set(target.x+(x+jx*dt)*e,target.y+(y+jy*dt)*e,target.z+(z+jz*dt)*e);
+  v.set((v.x-w*jx*dt)*e,(v.y-w*jy*dt)*e,(v.z-w*jz*dt)*e);
+}
 /** Runs once per render, after physics and visual interpolation. Never tracks raw body translation. */
 export class CameraManager {
   onFoot=false;
@@ -26,6 +33,9 @@ export class CameraManager {
   private readonly from=new T.Vector3();
   private readonly direction=new T.Vector3();
   private readonly up=new T.Vector3(0,1,0);
+  private readonly positionVelocity=new T.Vector3();private readonly aimVelocity=new T.Vector3();
+  private readonly shakeOffset=new T.Vector3();private readonly shakeBase=new T.Vector3();private shakeTime=0;private shakePulse=0;
+  private lastBoost=-1;private lastCrash=-1;
   private readonly ray=new R.Ray(this.from,this.direction);
   private readonly events=new AbortController();
   constructor(public camera:T.PerspectiveCamera, canvas:HTMLCanvasElement) {
@@ -63,13 +73,14 @@ export class CameraManager {
     const hit=car.physics.world.castRay(this.ray,length,true,
       R.QueryFilterFlags.EXCLUDE_DYNAMIC|R.QueryFilterFlags.EXCLUDE_KINEMATIC|R.QueryFilterFlags.EXCLUDE_SENSORS,
       undefined,undefined,car.body);
-    if(hit)position.copy(this.from).addScaledVector(this.direction,Math.max(0,hit.timeOfImpact-.35));
+    if(hit){position.copy(this.from).addScaledVector(this.direction,Math.max(0,hit.timeOfImpact-.35));return true;}return false;
   }
   startFoot(visual:T.Object3D){
     this.onFoot=true;this.following=false;this.orbitYaw=Math.atan2(this.camera.position.x-visual.position.x,this.camera.position.z-visual.position.z);this.orbitPitch=.25;this.distance=3.6;
   }
   stopFoot(){this.onFoot=false;this.following=false;this.setMode(0);}
   updateFoot(dt:number,visual:T.Object3D,car:VehiclePhysics){
+    this.camera.position.sub(this.shakeOffset);this.shakeOffset.set(0,0,0);this.shakePulse=0;
     const p=visual.position,instant=!this.following;
     if(!instant){this.movement.subVectors(p,this.lastPosition);this.camera.position.add(this.movement);this.target.add(this.movement);}
     this.desired.copy(p).add(this.offset.set(Math.sin(this.orbitYaw)*Math.cos(this.orbitPitch),Math.sin(this.orbitPitch),Math.cos(this.orbitYaw)*Math.cos(this.orbitPitch)).multiplyScalar(this.distance));
@@ -82,13 +93,14 @@ export class CameraManager {
   }
   update(dt:number,car:VehiclePhysics,visual:T.Object3D,state:string,t:number,input:Controls){
     dt=Number.isFinite(dt)?clamp(dt,0,.1):0;
+    this.camera.position.sub(this.shakeOffset);this.shakeOffset.set(0,0,0);
     const q=visual.quaternion,p=visual.position,forward=this.forward,desired=this.desired,aim=this.aim;
     forward.set(0,0,-1).applyQuaternion(q);
     let fov=62,instant=this.teleportSerial!==car.teleportSerial||this.lastMode!==this.mode;
     this.teleportSerial=car.teleportSerial;this.lastMode=this.mode;
     this.speed=instant?car.speed:damp(this.speed,car.speed,8,dt);
     let chase=false;
-    if(state==='menu'||state==='statistics'||state==='dev'||state==='garage'){
+    if(state==='menu'||state==='statistics'||state==='leaderboard'||state==='dev'||state==='garage'){
       const yaw=Math.atan2(-forward.x,-forward.z)+Math.PI*.84+Math.sin(t*.07)*.16,d=state==='garage'?7.3:8.6;
       desired.copy(p).add(this.offset.set(Math.sin(yaw)*d,2.2,Math.cos(yaw)*d));
       aim.copy(p);aim.y+=.1;
@@ -120,13 +132,28 @@ export class CameraManager {
       desired.copy(p).addScaledVector(forward,-(this.mode===0?(car.bike?3.6:4.8)+this.speed*.006:11));
       desired.y+=this.mode===0?(car.bike?2.7:3.2):3.9;
       aim.copy(p).addScaledVector(forward,this.mode===0?(car.bike?1.2:1.8):7+this.speed*.075);aim.y+=this.mode===0?.45:.75;
-      fov=lerp(62,79,clamp(this.speed/85,0,1));
+      fov=lerp(62,79,clamp(this.speed/85,0,1))+(car.boosting?3:0)+clamp(car.slipstreamStrength||0,0,1);
     }
     const alpha=instant?1:-Math.expm1(-6.5*dt);
-    this.camera.position.lerp(desired,alpha);this.target.lerp(aim,alpha);
+    if(chase&&!instant){spring(this.camera.position,desired,this.positionVelocity,dt);spring(this.target,aim,this.aimVelocity,dt);}
+    else {this.camera.position.lerp(desired,alpha);this.target.lerp(aim,alpha);this.positionVelocity.set(0,0,0);this.aimVelocity.set(0,0,0);}
     // Clamp the final smoothed segment too: interpolation must not pass through a wall.
-    if(chase)this.constrain(car,p,this.camera.position);
+    if(chase&&this.constrain(car,p,this.camera.position))this.positionVelocity.set(0,0,0);
     this.camera.lookAt(this.target);
+    const boost=car.boostSerial||0,crash=car.crashSerial||0;
+    if(chase&&state==='drive'&&!instant){
+      if(this.lastBoost>=0&&boost!==this.lastBoost)this.shakePulse=Math.max(this.shakePulse,.018);
+      if(this.lastCrash>=0&&crash!==this.lastCrash)this.shakePulse=Math.max(this.shakePulse,.045*clamp(car.crashSeverity||.4,0,1));
+      this.shakePulse*=Math.exp(-7*dt);this.shakeTime+=dt;
+      const rough=(car.surface==='GRASS'||car.surface==='GRAVEL')&&car.contacts>0?clamp(this.speed/65,0,1)*.016:0;
+      const amplitude=Math.min(.045,rough+this.shakePulse+(car.impact||0)*.012+(car.scrape||0)*.012);
+      if(amplitude>.0001){
+        this.shakeOffset.set(Math.sin(this.shakeTime*67)*amplitude,Math.sin(this.shakeTime*83)*amplitude*.65,0).applyQuaternion(this.camera.quaternion);
+        this.shakeBase.copy(this.camera.position);this.camera.position.add(this.shakeOffset);this.constrain(car,p,this.camera.position);this.shakeOffset.subVectors(this.camera.position,this.shakeBase);this.camera.lookAt(this.target);
+        this.camera.rotateZ(Math.sin(this.shakeTime*55)*amplitude*.045);
+      }
+    }else this.shakePulse=0;
+    this.lastBoost=boost;this.lastCrash=crash;
     if(state==='photo')this.camera.rotateZ(this.roll);
     const nextFov=instant?fov:damp(this.camera.fov,fov,8,dt);
     if(Math.abs(nextFov-this.camera.fov)>1e-5){this.camera.fov=nextFov;this.camera.updateProjectionMatrix();}

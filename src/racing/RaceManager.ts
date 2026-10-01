@@ -37,6 +37,8 @@ export class RaceManager {
   active = false;
   finished = false;
   elapsed = 0;
+  lapSerial=0;lastLapTime=0;lastLapNumber=0;lastLapAssisted=false;assistUsed=false;
+  private lapStartedAt=0;
   countdown = 0;
   checkpoint = 0;
   count = 19;
@@ -114,6 +116,7 @@ export class RaceManager {
     this.active = true;
     this.finished = false;
     this.elapsed = 0;
+    this.lapStartedAt=0;this.lastLapTime=0;this.lastLapNumber=0;this.assistUsed=false;
     this.countdown = 3;
     this.checkpoint = 0;
     this.position = network?1:8;
@@ -178,6 +181,10 @@ export class RaceManager {
     const gateForward=new T.Vector3(0,0,1).applyQuaternion(this.gate.quaternion);
     if (car.position.distanceTo(next) < 19 && car.position.clone().sub(next).dot(gateForward)>=-1) {
       this.checkpoint++;
+      if(this.checkpoint%this.count===0){
+        this.lastLapTime=this.elapsed-this.lapStartedAt;this.lapStartedAt=this.elapsed;
+        this.lastLapNumber=this.checkpoint/this.count;this.lastLapAssisted=this.assistUsed;this.assistUsed=false;this.lapSerial++;
+      }
       if (this.checkpoint >= this.count*this.laps) {
         this.playerProgress=length*this.laps;
         if(!this.networkRace)this.position=1+this.progress.filter(v=>v>length*this.laps).length;

@@ -1,3 +1,4 @@
+import {mobileDevice} from "../input/DevicePolicy";
 import { speedometerMarkup, updateSpeedometer } from "./Speedometer";
 import {RouteChoice} from "../vehicles/AutopilotRoutes";
 import {REGION_LABELS} from "../world/RegionalScenery";
@@ -16,6 +17,7 @@ export type State =
   | "loading"
   | "menu"
   | "statistics"
+  | "leaderboard"
   | "dev"
   | "drive"
   | "pause"
@@ -50,6 +52,7 @@ export class UI {
     public input: InputManager,
   ) {
     this.root = document.getElementById("ui")!;
+    const mobile=mobileDevice();document.documentElement.classList.toggle("mobile-device",mobile);
     const logo=document.querySelector<HTMLImageElement>("#startup img")?.src||"";
     this.root.innerHTML = `
  <div id="vignette"></div><div id="toast" role="status"></div>
@@ -61,11 +64,12 @@ export class UI {
      <button data-action="drive" class="mode-card open-card"><svg class="mode-icon" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="29"/><path d="M51 24 45 45 24 53 31 31Z M40 5v9 M40 66v9 M5 40h9 M66 40h9"/></svg><span class="mode-name">Open<br>World <b>↗</b></span></button>
      <button data-action="race" class="mode-card race-card"><svg class="mode-icon" viewBox="0 0 80 80" aria-hidden="true"><path d="M20 70V13h44v32H20"/><path class="flag-fill" d="M21 14h10v10H21Zm20 0h10v10H41Zm10 10h12v10H51Zm-20 0h10v10H31ZM21 34h10v10H21Zm20 0h10v10H41Z"/></svg><span class="mode-name">Race <b>→</b></span></button>
    </div>
-   <nav class="main-nav">${button("garage", "GARAGE <span>↗</span>")}${button("settings", "SETTINGS")}${button("statistics", "STATISTICS")}${button("continue", "CONTINUE", "continue")}</nav>
+   <nav class="main-nav">${button("garage", "GARAGE <span>↗</span>")}${button("settings", "SETTINGS")}${button("statistics", "STATISTICS")}${button("leaderboard", "LAP TIMES")}${button("continue", "CONTINUE", "continue")}</nav>
    
  </section>
  <div id="edition"><div class="wallet"><span class="coin-symbol">◉</span><b class="coin-balance">0</b><span>COINS</span></div></div>
- <section data-panel="drive" class="drive-ui"><header class="topbar"><div><span class="tiny" id="mode-label">OPEN WORLD</span><strong id="location">AZURE COAST</strong></div><nav><button data-action="vehicle-toggle" id="vehicle-toggle"><span class="desktop-action">SHIFT · EXIT</span><span class="mobile-action">EXIT</span></button><div class="wallet hud-wallet"><span class="coin-symbol">◉</span><b class="coin-balance">0</b></div><button data-action="autopilot" id="autopilot-toggle" aria-pressed="false"><span class="desktop-action"><span class="key">F</span> AUTOPILOT OFF</span><span class="mobile-action">AUTOPILOT</span></button>${button("photo", '<span class="key">P</span> PHOTO')}${button("map", '<span class="key">M</span> MAP')}${button("pause", '<span class="key">ESC</span> PAUSE')}</nav></header><aside id="law-hud" hidden><div id="speed-sign"><strong id="posted-limit">—</strong><small>km/h</small></div><div id="law-copy"><b id="law-title">UNRESTRICTED</b><span id="law-detail"></span><progress id="law-progress" max="1" value="0" hidden></progress></div></aside><div class="minimap"><canvas id="minimap" width="440" height="440"></canvas><div class="map-n">N</div></div><div class="instruments">${speedometerMarkup()}<div class="instrument-status"><div id="wheelie-status" hidden></div><div id="boost-status" hidden></div><div id="drift"></div></div></div><div id="race-hud"><div><span>POSITION</span><strong id="race-position">8<small> / 8</small></strong></div><div><span>TIME</span><strong id="race-time">00:00.00</strong></div><div><span>LAP</span><strong id="race-lap">1<small> / 1</small></strong></div><div><span>CHECKPOINT</span><strong id="race-checkpoint">01<small> / 19</small></strong></div></div><div id="countdown"></div><div class="touch-controls"><button data-hold="KeyA">◀</button><button data-hold="KeyD">▶</button><button data-hold="Space">HB</button><button data-hold="KeyS">BRAKE</button><button data-hold="KeyW">GO</button><button data-hold="ControlLeft" id="touch-wheelie" hidden>WHEELIE</button></div></section>
+ <section data-panel="drive" class="drive-ui"><header class="topbar"><div><span class="tiny" id="mode-label">OPEN WORLD</span><strong id="location">AZURE COAST</strong></div><nav><button data-action="vehicle-toggle" id="vehicle-toggle"><span class="desktop-action">SHIFT · EXIT</span><span class="mobile-action">EXIT</span></button><div class="wallet hud-wallet"><span class="coin-symbol">◉</span><b class="coin-balance">0</b></div><button data-action="autopilot" id="autopilot-toggle" aria-pressed="false"><span class="desktop-action"><span class="key">F</span> AUTOPILOT OFF</span><span class="mobile-action">AUTOPILOT</span></button>${button("photo", '<span class="key">P</span> PHOTO')}${button("map", '<span class="key">M</span> MAP')}${button("pause", '<span class="key">ESC</span> PAUSE')}</nav></header><aside id="law-hud" hidden><div id="speed-sign"><strong id="posted-limit">—</strong><small>km/h</small></div><div id="law-copy"><b id="law-title">UNRESTRICTED</b><span id="law-detail"></span><progress id="law-progress" max="1" value="0" hidden></progress></div></aside><div class="minimap"><canvas id="minimap" width="440" height="440"></canvas><div class="map-n">N</div></div><div class="instruments">${speedometerMarkup()}<div class="instrument-status"><div id="wheelie-status" hidden></div><div id="boost-status" hidden></div><div id="drift"></div><div id="drift-meter" hidden><div class="drift-meter-label"><span id="drift-state">DRIFT</span><b id="drift-charge">0%</b></div><div class="drift-meter-track" role="progressbar" aria-label="Drift charge" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="drift-fill"></i></div></div><div id="slipstream-status" hidden>SLIPSTREAM</div></div></div><div id="race-hud"><div><span>POSITION</span><strong id="race-position">8<small> / 8</small></strong></div><div><span>TIME</span><strong id="race-time">00:00.00</strong></div><div><span>LAP</span><strong id="race-lap">1<small> / 1</small></strong></div><div><span>CHECKPOINT</span><strong id="race-checkpoint">01<small> / 19</small></strong></div></div><div id="countdown"></div><div class="touch-controls"><button data-hold="KeyA">◀</button><button data-hold="KeyD">▶</button><button data-hold="Space">HB</button><button data-hold="KeyS">BRAKE</button><button data-hold="KeyW">GO</button><button data-hold="ControlLeft" id="touch-wheelie" hidden>WHEELIE</button></div></section>
+ <section data-panel="leaderboard" class="overlay"><div class="panel leaderboard-panel"><div class="panel-head"><h2>Lap times</h2>${button("back","← BACK","text-button")}</div><div class="leaderboard-toolbar"><div><span class="tiny">HORIZON CIRCUIT</span><strong id="lap-best">—</strong></div><label>Driving<select id="lap-filter"><option value="all">All laps</option><option value="manual">Manual</option><option value="assisted">Assisted</option></select></label></div><div id="leaderboard-content"></div></div></section>
  <section data-panel="statistics" class="overlay"><div class="panel statistics-panel"><div class="panel-head"><h2>Statistics</h2>${button("back","← BACK","text-button")}</div><div id="statistics-content"></div></div></section>
  <section data-panel="pause" class="overlay"><div class="panel narrow"><h2>Paused</h2><div class="stack">${button("resume", "RESUME", "primary")}${button("race", `HORIZON CIRCUIT <span>${(this.roads.main.length/1000).toFixed(1)} km / 8 cars</span>`)}${button("garage", "GARAGE")}${button("settings", "SETTINGS")}${button("controls", "CONTROLS")}${button("menu", "MAIN MENU")}</div></div></section>
  <section data-panel="settings" class="overlay"><div class="panel settings"><div class="panel-head"><div><h2>Settings</h2></div>${button("back", "← BACK", "text-button")}</div><div class="settings-grid"><div><h3>DISPLAY & WORLD</h3><label>Graphics quality<select data-setting="quality"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="ultra">Ultra</option></select></label><label class="check">Automatic resolution scaling<input data-setting="adaptiveResolution" type="checkbox"></label><label>Render distance <span id="render-distance-out"></span><input data-setting="renderDistance" type="range" min="500" max="3000" step="100"></label><label>Simulation distance <span id="simulation-distance-out"></span><input data-setting="simulationDistance" type="range" min="250" max="1000" step="50"></label><p class="muted">Simulation distance controls nearby traffic and scenery collisions. Active races and pursuits keep running.</p><label>Weather<select data-setting="weather"><option value="clear">Clear</option><option value="cloudy">Cloudy</option><option value="rain">Rain</option><option value="fog">Fog</option></select></label><label>Time of day <span id="hour-out"></span><input data-setting="hour" type="range" min="0" max="23.9" step=".1"></label><label class="check">Day / night cycle<input data-setting="cycle" type="checkbox"></label><label>Audio volume<input data-setting="volume" type="range" min="0" max="1" step=".01"></label></div><div><h3>DRIVING</h3><label>Race length<select data-setting="raceLaps"><option value="1">1 lap · sprint</option><option value="3">3 laps · endurance</option></select></label><label>Transmission<select data-setting="automatic"><option value="true">Automatic</option><option value="false">Manual · Q / E</option></select></label><label>Speed units<select data-setting="units"><option value="kmh">Kilometres per hour</option><option value="mph">Miles per hour</option></select></label><label class="check">Traction control<input data-setting="traction" type="checkbox"></label><label class="check">Stability assist<input data-setting="stability" type="checkbox"></label><label>Autopilot mode<select data-setting="autopilotMode"><option value="full">Full driving</option><option value="steering">Steering only · you control speed</option><option value="speed">Speed only · you steer</option></select></label><p id="autopilot-mode-help" class="muted"></p><label class="check">Choose autopilot route<input data-setting="autopilotRoutes" type="checkbox"></label><label>Autopilot speed <span id="autopilot-speed-out"></span><input data-setting="autopilotSpeed" type="range" min="30" max="180" step="5"></label><p class="muted">F toggles autopilot. Manual input overrides the assist.</p>${button("controls", "VIEW CONTROLS →", "text-button")}</div></div></div></section>
@@ -111,6 +115,7 @@ export class UI {
     });
     this.root.addEventListener("input", (e) => {
       const t = e.target as HTMLInputElement;
+      if(t.id==="lap-filter"){this.showLeaderboard();return;}
       if (t.dataset.setting) {
         const k = t.dataset.setting;
         let v: any =
@@ -126,19 +131,11 @@ export class UI {
       }
       if (t.dataset.photo) this.onPhoto(t.dataset.photo, Number(t.value));
     });
-    this.root
-      .querySelectorAll<HTMLButtonElement>("[data-hold]")
-      .forEach((b) => {
-        b.addEventListener("pointerdown", (e) => {
-          e.preventDefault();
-          b.setPointerCapture(e.pointerId);
-          this.input.touch.add(b.dataset.hold!);
-        });
-        for (const event of ["pointerup", "pointercancel"])
-          b.addEventListener(event, () =>
-            this.input.touch.delete(b.dataset.hold!),
-          );
-      });
+    if(mobile)this.root.querySelectorAll<HTMLButtonElement>("[data-hold]").forEach(b=>{
+      const release=()=>this.input.touch.delete(b.dataset.hold!);
+      b.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch')return;e.preventDefault();b.setPointerCapture(e.pointerId);this.input.touch.add(b.dataset.hold!);});
+      for(const event of ['pointerup','pointercancel','lostpointercapture'])b.addEventListener(event,release);
+    });
     this.map.addEventListener("pointerdown", (e) => {
       this.mapDrag = true;
       this.mapLast = { x: e.clientX, y: e.clientY };
@@ -170,6 +167,7 @@ export class UI {
   setState(state: State) {
     this.state = state;
     if(state==="statistics")this.showStatistics();
+    if(state==="leaderboard")this.showLeaderboard();
     this.root.dataset.state = state;
     this.root
       .querySelectorAll<HTMLElement>("[data-panel]")
@@ -252,6 +250,12 @@ export class UI {
     button.setAttribute("aria-pressed", state);
     const label = mode === "steering" ? "AUTO STEER" : mode === "speed" ? "AUTO SPEED" : "AUTOPILOT";
     button.innerHTML = `<span class="desktop-action"><span class="key">F</span> ${label} ${enabled ? "ON" : "OFF"}</span><span class="mobile-action">${label}</span>`;
+  }
+  showLeaderboard(){
+    const filter=(document.getElementById('lap-filter') as HTMLSelectElement).value;
+    const records=this.save.lapRecords.filter(r=>filter==='all'||(filter==='assisted')===r.assisted);
+    document.getElementById('lap-best')!.textContent=records.length?timeText(records[0].time):'—';
+    document.getElementById('leaderboard-content')!.innerHTML=records.length?`<table class="lap-table"><thead><tr><th scope="col">#</th><th scope="col">Lap time</th><th scope="col">Vehicle / driving</th><th scope="col" class="lap-date">Date</th></tr></thead><tbody>${records.map((r,i)=>`<tr><th scope="row">${String(i+1).padStart(2,'0')}</th><td class="lap-time">${timeText(r.time)}</td><td>${r.imported?'Previous best':CARS.find(c=>c.id===r.carId)!.name}<small>${r.imported?'Imported':`${r.assisted?'Assisted':'Manual'}${r.multiplayer?' · Multiplayer':''} · Lap ${r.lap}`}</small></td><td class="lap-date">${r.date?new Date(r.date).toLocaleDateString():'—'}</td></tr>`).join('')}</tbody></table>`:'<p class="leaderboard-empty">Complete a circuit lap to set a time.</p>';
   }
   showStatistics(){
     const s=this.save,miles=s.settings.units==='mph',num=(n:number)=>n.toLocaleString(undefined,{maximumFractionDigits:0});
@@ -343,10 +347,15 @@ export class UI {
       car.position.z,
     );
     const boost = document.getElementById("boost-status")!;
-    boost.hidden = car.boostRemaining <= 0;
-    boost.textContent = `BOOST · ${car.boostRemaining.toFixed(1)}s`;
+    boost.hidden = !car.boosting;
+    boost.textContent = car.nitroRemaining>0?`NITRO · ${car.nitroRemaining.toFixed(1)}s`:`BOOST · ${car.boostRemaining.toFixed(1)}s`;
+    const drift=car.drift;document.getElementById("drift-meter")!.hidden=!drift.active&&drift.rewardFlash<=0;
+    const charge=drift.rewardFlash>0?1:drift.charge;document.querySelector(".drift-meter-track")!.setAttribute("aria-valuenow",String(Math.round(charge*100)));document.getElementById("drift-fill")!.style.transform=`scaleX(${charge})`;
+    document.getElementById("drift-charge")!.textContent=`${Math.round(charge*100)}%`;
+    document.getElementById("drift-state")!.textContent=drift.rewardFlash>0?"NITRO":drift.charge>=1?(drift.settling?"STRAIGHTEN":"READY"):"DRIFT";
+    document.getElementById("slipstream-status")!.hidden=car.slipstreamStrength<.08;
     document.getElementById("drift")!.textContent =
-      Math.abs(car.slip) > 0.18 && car.speed > 10
+      !drift.active && drift.rewardFlash<=0 && Math.abs(car.slip) > 0.18 && car.speed > 10
         ? `DRIFT ${Math.round(car.driftScore)}`
         : "";
     this.lawStatus(race.active||race.finished);

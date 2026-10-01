@@ -19,7 +19,7 @@ export function parseSave(raw:string|null):Record<string,any>|null {
     else if(record(data.save))data=data.save;
     if(!record(data))return null;
     const a=data;
-    if(!['coins','cash','balance','ownedCars','unlockedCars','settings','distance','statistics','loadouts','ownedUpgrades','unlockedTracks'].some(k=>k in a))return null;
+    if(!['coins','cash','balance','ownedCars','unlockedCars','settings','distance','statistics','loadouts','ownedUpgrades','unlockedTracks','lapRecords','best','bestByLaps'].some(k=>k in a))return null;
     return {...a,coins:a.coins??a.cash??a.balance,ownedCars:a.ownedCars??a.unlockedCars,
       selectedCar:a.selectedCar??a.currentCar,statistics:a.statistics??a.stats,
       loadouts:a.loadouts??a.carLoadouts,ownedUpgrades:a.ownedUpgrades??a.purchasedUpgrades};

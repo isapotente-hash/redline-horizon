@@ -58,7 +58,7 @@ export class OnFootPlayer {
     if(!found)return false;
     car.body.setLinvel({x:0,y:0,z:0},true);car.body.setAngvel({x:0,y:0,z:0},true);
     car.body.resetForces(true);car.body.resetTorques(true);car.body.setBodyType(R.RigidBodyType.Fixed,true);
-    car.speed=car.signedSpeed=car.throttle=car.boostRemaining=car.wheelie=car.lean=0;car.braking=1;car.gear=1;car.rpm=850;car.beforeVelocity.set(0,0,0);
+    car.speed=car.signedSpeed=car.throttle=car.boostRemaining=car.nitroRemaining=car.slipstreamStrength=car.wheelie=car.lean=0;car.drift.reset();car.braking=1;car.gear=1;car.rpm=850;car.beforeVelocity.set(0,0,0);
     car.previousPosition.copy(car.position);car.previousRotation.copy(car.rotation);
     this.body.setTranslation(this.next,true);this.body.setNextKinematicTranslation(this.next);this.body.setEnabled(true);
     this.position.copy(this.next);this.previousPosition.copy(this.next);this.root.position.copy(this.next);

@@ -959,7 +959,7 @@ label output {
   }
 }
 @media (pointer: coarse) {
-  .touch-controls {
+  .mobile-device .touch-controls {
     display: flex;
     position: absolute;
     bottom: 16px;
@@ -967,7 +967,7 @@ label output {
     right: 16px;
     gap: 9px;
   }
-  .touch-controls button {
+  .mobile-device .touch-controls button {
     width: 48px;
     height: 46px;
     background: #17212ac4;
@@ -975,14 +975,14 @@ label output {
     font-size: 11px;
     touch-action: none;
   }
-  .touch-controls button:nth-child(3) {
+  .mobile-device .touch-controls button:nth-child(3) {
     margin-left: auto;
   }
-  .touch-controls button:last-child {
+  .mobile-device .touch-controls button:last-child {
     background: #bb233bcc;
   }
-  .drive-help,
-  #camera-name {
+  .mobile-device .drive-help,
+  .mobile-device #camera-name {
     display: none;
   }
 }
@@ -1165,8 +1165,8 @@ label output {
 .mobile-action {display:none}
 
 /* Touch-only HUD: mouse/keyboard layouts keep all of their existing rules. */
-@media (hover: none) and (pointer: coarse) {
-  .drive-ui {
+@media (min-width: 0px) {
+  .mobile-device .drive-ui {
     position:absolute;
     inset:0;
     --hud-left:max(12px,env(safe-area-inset-left,0px));
@@ -1179,20 +1179,20 @@ label output {
     --dial-size:152px;
     --hud-info-top:calc(var(--hud-top) + 94px);
   }
-  .drive-ui .topbar {
+  .mobile-device .drive-ui .topbar {
     top:var(--hud-top);
     left:var(--hud-left);
     right:var(--hud-right);
     display:block;
   }
-  .drive-ui .topbar > div:first-child {
+  .mobile-device .drive-ui .topbar > div:first-child {
     position:absolute;
     top:0;
     left:0;
     max-width:calc(50% - 64px);
   }
-  .drive-ui .topbar .tiny {font-size:7px;line-height:10px;letter-spacing:1px;margin-bottom:3px}
-  .drive-ui .topbar #location {
+  .mobile-device .drive-ui .topbar .tiny {font-size:7px;line-height:10px;letter-spacing:1px;margin-bottom:3px}
+  .mobile-device .drive-ui .topbar #location {
     display:block;
     font-size:9px;
     line-height:12px;
@@ -1201,14 +1201,14 @@ label output {
     overflow:hidden;
     text-overflow:ellipsis;
   }
-  .drive-ui .topbar nav {
+  .mobile-device .drive-ui .topbar nav {
     display:grid;
     grid-template-columns:minmax(44px,1fr) minmax(70px,1.4fr) repeat(3,minmax(44px,1fr));
     grid-template-rows:28px 44px;
     gap:8px;
     align-items:stretch;
   }
-  .drive-ui .topbar .hud-wallet {
+  .mobile-device .drive-ui .topbar .hud-wallet {
     grid-column:1 / -1;
     grid-row:1;
     justify-self:center;
@@ -1219,9 +1219,9 @@ label output {
     gap:5px;
     white-space:nowrap;
   }
-  .drive-ui .hud-wallet .coin-balance {font-size:12px;overflow:hidden;text-overflow:ellipsis}
-  .drive-ui .hud-wallet .coin-symbol {font-size:17px!important}
-  .drive-ui .topbar button {
+  .mobile-device .drive-ui .hud-wallet .coin-balance {font-size:12px;overflow:hidden;text-overflow:ellipsis}
+  .mobile-device .drive-ui .hud-wallet .coin-symbol {font-size:17px!important}
+  .mobile-device .drive-ui .topbar button {
     grid-row:2;
     min-width:0;
     min-height:44px;
@@ -1232,26 +1232,26 @@ label output {
     white-space:nowrap;
     border-radius:5px;
   }
-  .drive-ui .topbar #autopilot-toggle {font-size:clamp(8px,2.3vw,10px);padding:8px 4px}
-  .drive-ui .topbar .key,
-  .drive-ui .topbar .desktop-action {display:none}
-  .drive-ui .topbar .mobile-action {display:inline}
-  .drive-ui .minimap {
+  .mobile-device .drive-ui .topbar #autopilot-toggle {font-size:clamp(8px,2.3vw,10px);padding:8px 4px}
+  .mobile-device .drive-ui .topbar .key,
+  .mobile-device .drive-ui .topbar .desktop-action {display:none}
+  .mobile-device .drive-ui .topbar .mobile-action {display:inline}
+  .mobile-device .drive-ui .minimap {
     left:var(--hud-left);
     bottom:calc(var(--hud-bottom) + var(--touch-size) + 12px);
     width:var(--map-size);
     height:var(--map-size);
   }
-  .drive-ui .map-n {top:5px;font-size:8px}
-  .drive-ui .instruments {
+  .mobile-device .drive-ui .map-n {top:5px;font-size:8px}
+  .mobile-device .drive-ui .instruments {
     right:var(--hud-right);
     bottom:calc(var(--hud-bottom) + var(--touch-size) + 12px);
     width:var(--dial-size);
     transform:none;
   }
-  .drive-ui .instrument-status {right:8px;gap:3px}
-  .drive-ui .instrument-status > div {font-size:9px!important}
-  .drive-ui .touch-controls {
+  .mobile-device .drive-ui .instrument-status {right:8px;gap:3px}
+  .mobile-device .drive-ui .instrument-status > div {font-size:9px!important}
+  .mobile-device .drive-ui .touch-controls {
     display:grid;
     grid-template-columns:repeat(2,var(--touch-size)) minmax(8px,1fr) repeat(3,var(--touch-size));
     gap:var(--touch-gap);
@@ -1261,7 +1261,7 @@ label output {
     user-select:none;
     -webkit-user-select:none;
   }
-  .drive-ui .touch-controls button {
+  .mobile-device .drive-ui .touch-controls button {
     width:var(--touch-size);
     height:var(--touch-size);
     min-width:48px;
@@ -1272,67 +1272,103 @@ label output {
     font-size:10px;
     line-height:16px;
   }
-  .drive-ui [data-hold="KeyA"] {grid-column:1}
-  .drive-ui [data-hold="KeyD"] {grid-column:2}
-  .drive-ui [data-hold="Space"] {grid-column:4}
-  .drive-ui [data-hold="KeyS"] {grid-column:5}
-  .drive-ui [data-hold="KeyW"] {grid-column:6;background:#bb233bcc}
-  .drive-ui #touch-wheelie {
+  .mobile-device .drive-ui [data-hold="KeyA"] {grid-column:1}
+  .mobile-device .drive-ui [data-hold="KeyD"] {grid-column:2}
+  .mobile-device .drive-ui [data-hold="Space"] {grid-column:4}
+  .mobile-device .drive-ui [data-hold="KeyS"] {grid-column:5}
+  .mobile-device .drive-ui [data-hold="KeyW"] {grid-column:6;background:#bb233bcc}
+  .mobile-device .drive-ui #touch-wheelie {
     position:absolute;
     right:0;
     bottom:calc(100% + var(--touch-gap));
     font-size:8px;
   }
-  .drive-ui:has(#touch-wheelie:not([hidden])) .instruments {
+  .mobile-device .drive-ui:has(#touch-wheelie:not([hidden])) .instruments {
     bottom:calc(var(--hud-bottom) + 2 * var(--touch-size) + 24px);
   }
-  .drive-ui #law-hud {top:var(--hud-info-top);left:var(--hud-left);gap:8px;max-width:calc(100vw - var(--hud-left) - var(--hud-right))}
-  .drive-ui #speed-sign {width:44px;height:44px;border-width:4px}
-  .drive-ui #speed-sign strong {font-size:21px;line-height:23px}
-  .drive-ui #speed-sign small {font-size:7px}
-  .drive-ui #law-copy {padding:6px 8px;gap:3px;max-width:195px}
-  .drive-ui #law-title {font-size:8px;letter-spacing:.6px}
-  .drive-ui #law-detail {font-size:8px;line-height:1.35}
-  .drive-ui #mp-hud {top:calc(var(--hud-info-top) + 52px);left:var(--hud-left);max-width:calc(100vw - var(--hud-left) - var(--hud-right));font-size:8px;padding:8px 10px;min-height:32px}
-  .drive-ui #route-choice {top:calc(var(--hud-info-top) + 92px);left:var(--hud-left);right:auto;max-width:45vw;width:176px}
-  .drive-ui #route-options .key,
-  .drive-ui #route-hint {display:none}
-  .drive-ui #route-options button {display:block;min-height:44px;padding:8px}
-  .drive-ui #race-hud {top:var(--hud-info-top);max-width:calc(100vw - var(--hud-left) - var(--hud-right));gap:12px;padding:8px 12px}
-  .drive-ui #race-hud > div {gap:4px}
-  .drive-ui #race-hud strong {font-size:17px}
-  .drive-ui #race-hud span {font-size:6px;letter-spacing:.7px}
-  .drive-ui #race-hud small {font-size:9px}
-  .drive-ui:has(#race-hud[style*="flex"]) #mp-hud {top:calc(var(--hud-info-top) + 64px)}
-  .drive-ui .drive-help,
-  .drive-ui #camera-name {display:none}
+  .mobile-device .drive-ui #law-hud {top:var(--hud-info-top);left:var(--hud-left);gap:8px;max-width:calc(100vw - var(--hud-left) - var(--hud-right))}
+  .mobile-device .drive-ui #speed-sign {width:44px;height:44px;border-width:4px}
+  .mobile-device .drive-ui #speed-sign strong {font-size:21px;line-height:23px}
+  .mobile-device .drive-ui #speed-sign small {font-size:7px}
+  .mobile-device .drive-ui #law-copy {padding:6px 8px;gap:3px;max-width:195px}
+  .mobile-device .drive-ui #law-title {font-size:8px;letter-spacing:.6px}
+  .mobile-device .drive-ui #law-detail {font-size:8px;line-height:1.35}
+  .mobile-device .drive-ui #mp-hud {top:calc(var(--hud-info-top) + 52px);left:var(--hud-left);max-width:calc(100vw - var(--hud-left) - var(--hud-right));font-size:8px;padding:8px 10px;min-height:32px}
+  .mobile-device .drive-ui #route-choice {top:calc(var(--hud-info-top) + 92px);left:var(--hud-left);right:auto;max-width:45vw;width:176px}
+  .mobile-device .drive-ui #route-options .key,
+  .mobile-device .drive-ui #route-hint {display:none}
+  .mobile-device .drive-ui #route-options button {display:block;min-height:44px;padding:8px}
+  .mobile-device .drive-ui #race-hud {top:var(--hud-info-top);max-width:calc(100vw - var(--hud-left) - var(--hud-right));gap:12px;padding:8px 12px}
+  .mobile-device .drive-ui #race-hud > div {gap:4px}
+  .mobile-device .drive-ui #race-hud strong {font-size:17px}
+  .mobile-device .drive-ui #race-hud span {font-size:6px;letter-spacing:.7px}
+  .mobile-device .drive-ui #race-hud small {font-size:9px}
+  .mobile-device .drive-ui:has(#race-hud[style*="flex"]) #mp-hud {top:calc(var(--hud-info-top) + 64px)}
+  .mobile-device .drive-ui .drive-help,
+  .mobile-device .drive-ui #camera-name {display:none}
 }
 
 /* Wide touch screens have space for a single-row action bar. */
-@media (hover: none) and (pointer: coarse) and (min-width: 640px) {
-  .drive-ui {--map-size:116px;--dial-size:184px;--hud-info-top:calc(var(--hud-top) + 58px)}
-  .drive-ui .topbar > div:first-child {max-width:150px}
-  .drive-ui .topbar nav {
+@media (min-width: 640px) {
+  .mobile-device .drive-ui {--map-size:116px;--dial-size:184px;--hud-info-top:calc(var(--hud-top) + 58px)}
+  .mobile-device .drive-ui .topbar > div:first-child {max-width:150px}
+  .mobile-device .drive-ui .topbar nav {
     grid-template-columns:clamp(48px,7vw,68px) 70px repeat(3,clamp(48px,7vw,68px));
     grid-template-rows:44px;
     justify-content:end;
     gap:4px;
   }
-  .drive-ui .topbar button {grid-row:1;font-size:9px}
-  .drive-ui .topbar #autopilot-toggle {font-size:9px}
-  .drive-ui .topbar .hud-wallet {position:absolute;top:8px;left:50%;transform:translateX(-50%);max-width:100px}
-  .drive-ui #mp-hud {top:var(--hud-info-top);left:auto;right:var(--hud-right);max-width:180px}
-  .drive-ui:has(#race-hud[style*="flex"]) #mp-hud {top:calc(var(--hud-info-top) + 64px);right:calc(var(--hud-right) + var(--dial-size) + 12px)}
-  .drive-ui #route-choice {top:var(--hud-info-top);left:calc(var(--hud-left) + var(--map-size) + 14px);max-width:24vw}
-  .drive-ui:has(#route-choice:not([hidden])) #law-copy {position:absolute;top:52px;left:0;max-width:var(--map-size)}
+  .mobile-device .drive-ui .topbar button {grid-row:1;font-size:9px}
+  .mobile-device .drive-ui .topbar #autopilot-toggle {font-size:9px}
+  .mobile-device .drive-ui .topbar .hud-wallet {position:absolute;top:8px;left:50%;transform:translateX(-50%);max-width:100px}
+  .mobile-device .drive-ui #mp-hud {top:var(--hud-info-top);left:auto;right:var(--hud-right);max-width:180px}
+  .mobile-device .drive-ui:has(#race-hud[style*="flex"]) #mp-hud {top:calc(var(--hud-info-top) + 64px);right:calc(var(--hud-right) + var(--dial-size) + 12px)}
+  .mobile-device .drive-ui #route-choice {top:var(--hud-info-top);left:calc(var(--hud-left) + var(--map-size) + 14px);max-width:24vw}
+  .mobile-device .drive-ui:has(#route-choice:not([hidden])) #law-copy {position:absolute;top:52px;left:0;max-width:var(--map-size)}
 }
-@media (hover: none) and (pointer: coarse) and (max-height: 520px) {
-  .drive-ui {--map-size:94px;--dial-size:clamp(110px,36dvh,144px)}
-  .drive-ui:has(#touch-wheelie:not([hidden])) {--dial-size:clamp(96px,29dvh,120px)}
-  .drive-ui .instrument-status {bottom:8px;right:calc(100% + 8px);max-width:100px;width:max-content}
+@media (max-height: 520px) {
+  .mobile-device .drive-ui {--map-size:94px;--dial-size:clamp(110px,36dvh,144px)}
+  .mobile-device .drive-ui:has(#touch-wheelie:not([hidden])) {--dial-size:clamp(96px,29dvh,120px)}
+  .mobile-device .drive-ui .instrument-status {bottom:8px;right:calc(100% + 8px);max-width:100px;width:max-content}
 }
-@media (hover: none) and (pointer: coarse) and (max-height: 360px) and (min-width: 640px) {
-  .drive-ui:has(#touch-wheelie:not([hidden])) #mp-hud {right:calc(var(--hud-right) + var(--dial-size) + 12px)}
-  .drive-ui:has(#route-choice:not([hidden])) #law-copy {top:48px;padding:4px 6px;gap:2px}
-  .drive-ui:has(#route-choice:not([hidden])) #law-detail {display:none}
+@media (max-height: 360px) and (min-width: 640px) {
+  .mobile-device .drive-ui:has(#touch-wheelie:not([hidden])) #mp-hud {right:calc(var(--hud-right) + var(--dial-size) + 12px)}
+  .mobile-device .drive-ui:has(#route-choice:not([hidden])) #law-copy {top:48px;padding:4px 6px;gap:2px}
+  .mobile-device .drive-ui:has(#route-choice:not([hidden])) #law-detail {display:none}
+}
+
+.leaderboard-panel {width:800px;border-top:2px solid #8be8ce}
+.leaderboard-panel h2 {margin:0}
+.leaderboard-toolbar {display:flex;justify-content:space-between;align-items:center;gap:20px;margin:24px 0}
+.leaderboard-toolbar > div {display:grid;gap:5px;color:#9caab6;font-size:11px}
+.leaderboard-toolbar strong {font-size:32px;color:#fff;font-variant-numeric:tabular-nums}
+.leaderboard-toolbar select {background:#111c24;color:#fff;border:1px solid #32434f;border-radius:6px;min-height:40px;padding:8px 12px}
+.leaderboard-toolbar label {margin:0;gap:6px;display:grid}
+.lap-table {width:100%;border-collapse:collapse;text-align:left;font-size:12px}
+.lap-table th {color:#899ca9;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:1px}
+.lap-table th,.lap-table td {padding:14px 10px;border-bottom:1px solid #263640}
+.lap-table tbody th:first-child {width:42px;color:#8be8ce}
+.lap-table tbody tr:first-child {background:#8be8ce08}
+.lap-time {white-space:nowrap;font-size:20px;font-variant-numeric:tabular-nums}
+.lap-table small {display:block;font-size:10px;color:#9caab6;margin-top:6px}
+.lap-date {white-space:nowrap;font-size:11px;color:#9caab6}
+.leaderboard-empty {text-align:center;padding:48px 12px;color:#9caab6}
+#drift-meter {width:140px;font-size:10px;color:#ffe58f}
+.drift-meter-label {display:flex;justify-content:space-between;gap:12px;margin-bottom:6px}
+.drift-meter-track {height:5px;background:#3a3a3a;border-radius:3px;overflow:hidden}
+#drift-fill {display:block;width:100%;height:100%;background:#ffe58f;transform:scaleX(0);transform-origin:left}
+#slipstream-status {font-size:10px;color:#8be8ce}
+@media (max-width:600px) {
+  .leaderboard-panel {padding:20px}
+  .leaderboard-toolbar {flex-wrap:wrap;gap:12px}
+  .leaderboard-toolbar select {width:120px}
+  .lap-table th,.lap-table td {padding:12px 5px}
+  .lap-time {font-size:17px}
+  .lap-date {display:none}
+  .lap-table td:nth-child(3) {font-size:10px}
+  .lap-table small {font-size:9px}
+}
+.mobile-device .drive-ui .instrument-status #drift-meter {width:110px;font-size:8px!important}
+@media (max-height:520px) {
+  .mobile-device .drive-ui:has(#touch-wheelie:not([hidden])) .instrument-status {bottom:calc(-1 * var(--touch-size) - 8px)}
 }
