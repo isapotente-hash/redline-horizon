@@ -1,3 +1,5 @@
+import {DriverSetup,validateSetup,SETUP_PRESETS} from '../vehicles/DriverSetup';
+import {LIVERIES,Livery,validLivery,cleanPlate} from '../vehicles/CosmeticCatalog';
 import {validRoute,RouteId} from "../racing/RouteCatalog";
 import { SAVE_KEY, BACKUP_KEY, SAVE_VERSION, readSave, record } from "./SaveStorage";
 import { CARS, carSpec } from "../vehicles/CarCatalog";
@@ -5,6 +7,7 @@ import { Loadout, STOCK, UPGRADES, UPGRADE_SLOTS } from "../vehicles/UpgradeCata
 import {LapRecord,MAX_LAP_RECORDS,validLapRecords} from '../racing/LapRecords';
 export type Settings = {
   cameraMotion:number;
+  cornerGuide:"off"|"hud"|"markers";rainIntensity:number;diagnostics:boolean;repairCosts:boolean;driverName:string;
   adaptiveResolution:boolean;
   renderDistance: number;
   simulationDistance: number;
@@ -27,7 +30,7 @@ export type Settings = {
   units: "kmh" | "mph";
 };
 export const defaults: Settings = {
-  cameraMotion:1,
+  cameraMotion:1,cornerGuide:"off",rainIntensity:.7,diagnostics:false,repairCosts:false,driverName:"Driver",
   adaptiveResolution:true,
   renderDistance: 1600,
   simulationDistance: 600,
@@ -51,9 +54,9 @@ export const defaults: Settings = {
 };
 function validSettings(value:unknown):Settings {
   const result={...defaults}, a=record(value)?value:{};
-  for(const key of ['adaptiveResolution','autopilotRoutes','cycle','automatic','traction','stability'] as const)
+  for(const key of ['adaptiveResolution','autopilotRoutes','cycle','automatic','traction','stability','diagnostics','repairCosts'] as const)
     if(typeof a[key]==='boolean')result[key]=a[key];
-  const bounds={cameraMotion:[0,1],renderDistance:[500,3000],simulationDistance:[250,1000],autopilotSpeed:[30,180],hour:[0,24],volume:[0,1],tint:[0,1],camera:[0,6]} as const;
+  const bounds={rainIntensity:[0,1],cameraMotion:[0,1],renderDistance:[500,3000],simulationDistance:[250,1000],autopilotSpeed:[30,180],hour:[0,24],volume:[0,1],tint:[0,1],camera:[0,6]} as const;
   for(const key of Object.keys(bounds) as (keyof typeof bounds)[])
     if(Number.isFinite(a[key]))result[key]=Math.max(bounds[key][0],Math.min(bounds[key][1],a[key]));
   result.camera=Math.floor(result.camera);
@@ -63,6 +66,8 @@ function validSettings(value:unknown):Settings {
   if(['clear','cloudy','rain','fog'].includes(a.weather))result.weather=a.weather;
   if(['kmh','mph'].includes(a.units))result.units=a.units;
   for(const key of ['paint','wheels'] as const)if(typeof a[key]==='string'&&/^#[0-9a-f]{6}$/i.test(a[key]))result[key]=a[key];
+  if(["off","hud","markers"].includes(a.cornerGuide))result.cornerGuide=a.cornerGuide;
+  if(typeof a.driverName==="string")result.driverName=a.driverName.replace(/[<>\x00-\x1f]/g,"").trim().slice(0,16)||"Driver";
   return result;
 }
 const nonnegative=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)?Math.max(0,v):0;
@@ -87,6 +92,15 @@ export class SaveManager {
   loadouts:Record<string,Loadout>={};
   ownedUpgrades:Record<string,string[]>={};
   rewardMeters=0;
+  setups:Record<string,DriverSetup>={};
+  ownedLiveries:Livery[]=['factory'];liveries:Record<string,Livery>={};plates:Record<string,string>={};
+  wetRouteBests:Partial<Record<RouteId,number>>={};wetBestByLaps:Record<number,number>={};
+  get setup(){return validateSetup(this.setups[this.selectedCar]);}
+  setSetup(key:string,value:number){if(!['brakeBias','steering','differential','spring'].includes(key)||!Number.isFinite(value))return;this.setups[this.selectedCar]=validateSetup({...this.setup,[key]:value});this.save();}
+  presetSetup(id:string){if(!(id in SETUP_PRESETS))return;this.setups[this.selectedCar]={...SETUP_PRESETS[id as keyof typeof SETUP_PRESETS]};this.save();}
+  buyLivery(id:unknown){if(!validLivery(id))return 'invalid';const part=LIVERIES.find(l=>l.id===id)!;if(!this.ownedLiveries.includes(id)){if(!this.unlimitedCoins&&this.coins<part.price)return 'insufficient';if(!this.unlimitedCoins)this.coins-=part.price;this.ownedLiveries.push(id);}this.liveries[this.selectedCar]=id;this.save();return 'equipped';}
+  setPlate(value:string){this.plates[this.selectedCar]=cleanPlate(value);this.save();}
+
   get loadout():Loadout { return {...STOCK,...this.loadouts[this.selectedCar]}; }
   ownsUpgrade(id:string) { return Object.values(STOCK).includes(id)||(this.ownedUpgrades[this.selectedCar]||[]).includes(id); }
   buyUpgrade(id:string):"equipped"|"bought"|"insufficient"|"invalid" {
@@ -127,14 +141,14 @@ export class SaveManager {
   legacyRecords:Record<string,unknown>={};
   bestByLaps:Record<number,number>={};
   lapRecords:LapRecord[]=[];
-  recordLap(time:number,carId:string,lap:number,assisted=false,multiplayer=false):boolean {
+  recordLap(time:number,carId:string,lap:number,assisted=false,multiplayer=false,condition:"dry"|"wet"="dry"):boolean {
     if(!Number.isFinite(time)||time<=0||time>21600||!Number.isInteger(lap)||lap<1||lap>3||!CARS.some(c=>c.id===carId))return false;
-    this.lapRecords.push({time,carId,date:Date.now(),lap,assisted,multiplayer});
+    this.lapRecords.push({time,carId,date:Date.now(),lap,assisted,multiplayer,condition});
     this.lapRecords.sort((a,b)=>a.time-b.time||a.date-b.date);this.lapRecords.length=Math.min(this.lapRecords.length,MAX_LAP_RECORDS);
     this.save();return true;
   }
   routeBests:Partial<Record<RouteId,number>>={};
-  recordRoute(id:RouteId,time:number){if(!validRoute(id)||!Number.isFinite(time)||time<=0||time>21600)return;this.routeBests[id]=Math.min(this.routeBests[id]||Infinity,time);this.save();}
+  recordRoute(id:RouteId,time:number,condition:"dry"|"wet"="dry"){if(!validRoute(id)||!Number.isFinite(time)||time<=0||time>21600)return;const records=condition==="wet"?this.wetRouteBests:this.routeBests;records[id]=Math.min(records[id]||Infinity,time);this.save();}
   best = 0;
   distance = 0;
   position: { x: number; y: number; z: number; yaw: number } | null = null;
@@ -146,6 +160,10 @@ export class SaveManager {
       const a = loaded.data;
       if (a) {
         this.settings = validSettings(a.settings);
+        this.ownedLiveries=['factory',...(Array.isArray(a.ownedLiveries)?a.ownedLiveries.filter((id:unknown)=>validLivery(id)&&id!=='factory'):[])];
+        for(const car of CARS){this.setups[car.id]=validateSetup(a.setups?.[car.id]);const l=a.liveries?.[car.id];if(validLivery(l)&&this.ownedLiveries.includes(l))this.liveries[car.id]=l;this.plates[car.id]=cleanPlate(a.plates?.[car.id]);}
+        if(record(a.wetRouteBests))for(const [id,t] of Object.entries(a.wetRouteBests))if(validRoute(id)&&typeof t==='number'&&t>0&&t<=21600)this.wetRouteBests[id]=t;
+        for(const lap of [1,3])if(Number.isFinite(a.wetBestByLaps?.[lap])&&a.wetBestByLaps[lap]>0&&a.wetBestByLaps[lap]<=21600)this.wetBestByLaps[lap]=a.wetBestByLaps[lap];
         for(const key of Object.keys(this.statistics) as (keyof typeof this.statistics)[]){const value=a.statistics?.[key];if(Number.isFinite(value)&&value>=0)this.statistics[key]=value;}
         if(a.performanceEdition===5)this.settings.quality=defaults.quality;
         if(record(a.routeBests))for(const [id,time] of Object.entries(a.routeBests))if(validRoute(id)&&typeof time==="number"&&time>0&&time<=21600)this.routeBests[id]=time;
@@ -184,6 +202,7 @@ export class SaveManager {
         schemaVersion:SAVE_VERSION,savedAt:Date.now(),
         coins:this.coins,ownedCars:[...this.ownedCars],selectedCar:this.selectedCar,
         collectedCoins:[...this.collectedCoins],unlockedTracks:this.unlockedTracks,
+        setups:this.setups,ownedLiveries:this.ownedLiveries,liveries:this.liveries,plates:this.plates,wetRouteBests:this.wetRouteBests,wetBestByLaps:this.wetBestByLaps,
         loadouts:this.loadouts,ownedUpgrades:this.ownedUpgrades,rewardMeters:this.rewardMeters,
         settings:this.settings,routeBests:this.routeBests,best:this.best,bestByLaps:this.bestByLaps,lapRecords:this.lapRecords,
         layoutVersion:2,legacyRecords:this.legacyRecords,distance:this.distance,

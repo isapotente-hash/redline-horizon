@@ -1,3 +1,4 @@
+import {raceCondition} from '../core/Weather';
 import * as T from "three";
 import { RoadNetwork,surfaceBank } from "../world/RoadNetwork";
 import { PhysicsWorld, VehiclePhysics } from "../physics/VehiclePhysics";
@@ -44,6 +45,7 @@ export class RaceManager {
     return [{slot:this.localSlot,finished:this.finished,time:this.resultTime,connected:true,progress:this.playerProgress},...Array.from(this.opponents,([slot,p])=>({slot,...p}))]
       .sort((a,b)=>Number(b.finished)-Number(a.finished)||(a.finished?a.time-b.time:Number(b.connected)-Number(a.connected)||b.progress-a.progress)||a.slot-b.slot);
   }
+  condition:"dry"|"wet"="dry";
   active = false;
   finished = false;
   elapsed = 0;
@@ -120,6 +122,7 @@ export class RaceManager {
     const line=roads.at(roads.main,this.startDistance);this.finish.position.copy(line.p);this.finish.rotation.y=Math.atan2(line.t.x,line.t.z);this.finish.visible=false;
   }
   start(car: VehiclePhysics, laps=1, network=false,routeId:RouteId="horizon") {
+    this.condition=raceCondition(car.settings);
     this.routeId=routeId;this.route=routeRoad(this.roads,routeId);this.practice=false;this.startDistance=this.route.closed?120:80;this.count=Math.ceil(this.totalLength/380);
     this.networkRace=network;this.playerProgress=0;this.configurePlayers([0,1],0);
     this.rewardClaimed=false;this.rewardEarned=0;

@@ -1,0 +1,2 @@
+import {Road} from './RoadNetwork';
+export function routePreview(road:Road){let gain=0,min=Infinity,max=-Infinity,bends=0;for(let i=0;i<road.samples.length;i++){const s=road.samples[i];min=Math.min(min,s.p.y);max=Math.max(max,s.p.y);if(i)gain+=Math.max(0,s.p.y-road.samples[i-1].p.y);if(i>2){const a=road.samples[i-2],b=road.samples[i],distance=b.d-a.d;if(distance>0&&Math.acos(Math.min(1,Math.max(-1,a.t.dot(b.t))))/distance>.015)bends++;}}return {length:road.length,gain,min,max,difficulty:bends>20?'Technical':gain>250?'Challenging':'Flowing',bends};}

@@ -175,3 +175,11 @@ test('incompatible vehicle classes and failed route loads cannot start a room ra
   assert.equal(host.setRaceSettings({route:'missing',laps:1,vehicleClass:'all',startRule:'grid'} as any),false);
  }finally{host.leave();guest.leave();}
 });
+
+test('driver names, host weather rules and safe reconnection survive a lost guest link',async()=>{
+ const host=new RaceConnection(async()=>Peer),guest=new RaceConnection(async()=>Peer);host.setName('Host Racer');guest.setName('<Guest>');
+ try{await host.open(true);await flush();await guest.open(false,host.code);await flush();await flush();assert.equal(host.drivers.get(0)?.name,'Host Racer');assert.equal(host.drivers.get(1)?.name,'Guest');assert.equal(guest.drivers.get(0)?.name,'Host Racer');
+  assert.equal(host.setRaceSettings({route:'coast',laps:1,vehicleClass:'all',startRule:'grid',weather:'rain'}),true);await flush();assert.equal(guest.raceSettings.weather,'rain');assert.equal(guest.setRaceSettings({...host.raceSettings,weather:'clear'}),false);
+  const code=host.code;const link=Peer.peers.get(ROOM_PREFIX+code)!.links.find(l=>l.open)!;link.close();await flush();assert.equal(guest.connected,false);assert.equal(guest.lastRoom,code);assert.equal(host.playerCount,1);assert.equal(guest.raceLocked,false);await guest.open(false,guest.lastRoom);await flush();await flush();assert.equal(guest.connected,true);assert.equal(host.playerCount,2);assert.equal(host.drivers.get(guest.slot)?.name,'Guest');assert.equal(guest.raceSettings.weather,'rain');
+ }finally{host.leave();guest.leave();}
+});

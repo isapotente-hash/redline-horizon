@@ -1,3 +1,5 @@
+import {DriverSetup,validateSetup,setupTune,axleShare} from '../vehicles/DriverSetup';
+import {wetness} from '../core/Weather';
 import { CarSpec, CARS, isBike, chassisFor } from "../vehicles/CarCatalog";
 import { BASE_TUNE, HandlingTune, Loadout, tuneFor } from "../vehicles/UpgradeCatalog";
 import RAPIER from "@dimforge/rapier3d-compat";
@@ -91,8 +93,9 @@ export class VehiclePhysics {
   }
   tune:HandlingTune={...BASE_TUNE};
   teleportSerial=0;
-  applyLoadout(loadout:Loadout) {
-    this.tune=tuneFor(loadout);
+  setup:DriverSetup=validateSetup(null);
+  applyLoadout(loadout:Loadout,setup?:DriverSetup) {
+    this.setup=validateSetup(setup);this.tune=setupTune(tuneFor(loadout),this.setup);
     for(let i=0;i<4;i++) {
       this.controller.setWheelSuspensionStiffness(i,this.tune.stiffness);
       this.controller.setWheelSuspensionCompression(i,this.tune.compression);
@@ -132,9 +135,10 @@ export class VehiclePhysics {
   distance = 0;
   driftScore = 0;
   impact = 0;
+  impactSide=0;
   scrape=0;private scrapeTick=0;
   private readonly scrapeManifold=(m:RAPIER.TempContactManifold)=>{
-    if(m.numSolverContacts()>0&&Math.abs(m.normal().y)<.45)this.scrape=Math.max(this.scrape,clamp(this.speed/55,0,1));
+    if(m.numSolverContacts()>0&&Math.abs(m.normal().y)<.45){this.scrape=Math.max(this.scrape,clamp(this.speed/55,0,1));const n=m.normal();this.impactSide=clamp(n.x*this.right.x+n.z*this.right.z,-1,1);}
   };
   private readonly scrapeContact=(other:RAPIER.Collider)=>{
     if(other.isSensor())return;const body=other.parent();if(body&&!body.isFixed())return;
@@ -281,7 +285,7 @@ export class VehiclePhysics {
         ? 1.05
         : 0.75
       : this.settings.weather === "rain"
-        ? 1.75
+        ? lerp(2.8,1.65,wetness(this.settings))
         : 2.8;
     this.reverse =
       !input.handbrake &&
@@ -312,7 +316,7 @@ export class VehiclePhysics {
     force *= this.spec.power * this.tune.enginePower * this.chassis.forceScale;
     if(off && this.spec.kit==='pickup')grip*=1.65;
     if(off && this.spec.kit==='sportbike')grip*=.82;
-    grip *= this.spec.handling * (off?this.tune.loose*this.traits.loose:this.settings.weather==="rain"?this.tune.wet*this.traits.wet:this.tune.dry);
+    grip *= this.spec.handling * (off?this.tune.loose*this.traits.loose:this.settings.weather==="rain"?lerp(this.tune.dry,this.tune.wet*this.traits.wet,wetness(this.settings)):this.tune.dry);
     if (this.shiftTimer > 0) force *= 0.12;
     if (this.settings.traction)
       force *= 1 - clamp((Math.abs(this.slip) - 0.12) * 1.5, 0, 0.75);
@@ -320,7 +324,7 @@ export class VehiclePhysics {
       force = -6000 * this.chassis.forceScale * input.brake * (1 - clamp((this.speed - 8) / 6, 0, 1));
     this.steering = damp(
       this.steering,
-      (input.steer * this.chassis.steerAngle * Math.sqrt(this.spec.handling) * lerp(1,this.tune.brakeTurn,this.braking)) / (1 + this.speed * this.chassis.steerFade),
+      (input.steer * this.setup.steering * this.chassis.steerAngle * Math.sqrt(this.spec.handling) * lerp(1,this.tune.brakeTurn,this.braking)) / (1 + this.speed * this.chassis.steerFade),
       this.tune.response*this.chassis.response,
       dt,
     );
@@ -380,9 +384,11 @@ export class VehiclePhysics {
       const yaw=this.body.angvel().y;
       b.addTorque({x:0,y:-(yaw*12+this.slip*35)*this.chassis.mass*driftRecovery,z:0},true);
     }
+    if(!this.bike&&this.contacts>=3&&this.throttle>.2&&this.speed>4){const yaw=this.body.angvel().y;b.addTorque({x:0,y:-yaw*this.chassis.mass*this.setup.differential*3*this.throttle,z:0},true);}
+    const rearShare=axleShare(this.controller.wheelIsInContact(2),this.controller.wheelIsInContact(3),this.setup.differential),frontShare=axleShare(this.controller.wheelIsInContact(0),this.controller.wheelIsInContact(1),this.setup.differential);
     for (let i = 0; i < 4; i++) {
       this.setWheelValue(0,i,14000*this.chassis.mass/1550*(this.bike&&i<2?1-clamp(this.wheelie/.12,0,1):1));
-      this.setWheelValue(1,i, this.traits.drive==="AWD"?force*(i<2?.20:.30):i >= 2 ? force / 2 : 0);
+      this.setWheelValue(1,i, this.traits.drive==="AWD"?force*(i<2?.4:.6)*(i%2?1-(i<2?frontShare:rearShare):(i<2?frontShare:rearShare)):i >= 2 ? force*(i===2?rearShare:1-rearShare) : 0);
       this.setWheelValue(2,i, i < 2 ? this.steering : 0);
       this.setWheelValue(3,
         i,
@@ -437,6 +443,7 @@ export class VehiclePhysics {
       const landing=this.beforeVelocity.y < -7 && v.y-this.beforeVelocity.y>2.5 && (this.contacts>0||solidContact);
       const impact=solidContact && Math.hypot(this.beforeVelocity.x,this.beforeVelocity.z)>12 && delta>4;
       if(landing||impact) {
+        this.impactSide=clamp(((this.beforeVelocity.x-v.x)*this.right.x+(this.beforeVelocity.z-v.z)*this.right.z)/Math.max(1,delta),-1,1);
         this.crashSerial++;this.crashSeverity=clamp(delta/22,.35,1);
         this.crashCooldown=1.8;this.impact=1;
       }

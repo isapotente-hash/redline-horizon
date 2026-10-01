@@ -83,7 +83,7 @@ export class Autopilot {
     const delta = point.sub(car.position);
     const angle = Math.atan2(-delta.dot(car.right), delta.dot(car.forward));
     const wheelAngle = Math.atan2(2 * (car.chassis.halfLength*2) * Math.sin(angle), look);
-    input.steer = clamp(wheelAngle * (1 + car.speed * car.chassis.steerFade) / (car.chassis.steerAngle*Math.sqrt(car.spec.handling)), -1, 1);
+    input.steer = clamp(wheelAngle * (1 + car.speed * car.chassis.steerFade) / (car.chassis.steerAngle*Math.sqrt(car.spec.handling)*(car.setup?.steering||1)), -1, 1);
     // Compensate measured lateral motion instead of repeatedly chasing the visual heading.
     if(this.drift.phase==='grip')input.steer=clamp(input.steer-car.slip*.35,-1,1);
     if (mode === "steering") {this.drift.reset();this.smoothSteer(input,dt);return input;}
@@ -141,7 +141,7 @@ export class Autopilot {
     for(let d=Math.max(0,turn.travel-3);d<=Math.min(turn.length,turn.travel+14);d+=.5){const error=turn.curve.getPointAt(d/turn.length).distanceToSquared(car.position);if(error<best){best=error;progress=d;}}
     turn.travel=Math.max(turn.travel,progress);
     const target=turn.curve.getPointAt(Math.min(1,(turn.travel+5+car.speed*.25)/turn.length)),delta=target.sub(car.position),angle=Math.atan2(-delta.dot(car.right),delta.dot(car.forward));
-    input.steer=clamp(Math.atan2(4*car.chassis.halfLength*Math.sin(angle),Math.max(5,delta.length()))*(1+car.speed*car.chassis.steerFade)/(car.chassis.steerAngle*Math.sqrt(car.spec.handling))-car.slip*.35,-1,1);
+    input.steer=clamp(Math.atan2(4*car.chassis.halfLength*Math.sin(angle),Math.max(5,delta.length()))*(1+car.speed*car.chassis.steerFade)/(car.chassis.steerAngle*Math.sqrt(car.spec.handling)*(car.setup?.steering||1))-car.slip*.35,-1,1);
     if(mode==='full'){
       let desired=Math.min(speed/3.6,7);
       for(const other of scene.cars||[]){const road=other.road||this.road!,a=this.roads.at(road,other.d),delta=a.p.clone().addScaledVector(a.r,other.lane).sub(car.position),ahead=delta.dot(car.forward);if(ahead>0&&ahead<35&&Math.abs(delta.dot(car.right))<3)desired=Math.min(desired,Math.sqrt(Math.max(0,ahead-9)*5));}

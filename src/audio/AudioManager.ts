@@ -13,8 +13,9 @@ export class AudioManager {
   hornGain?: GainNode;
   lastImpact = 0;
   private readonly ratios=[.5,1,1.005,2];
-  private readonly transients:{osc:OscillatorNode;gain:GainNode}[]=[];private transientIndex=0;
+  private readonly transients:{osc:OscillatorNode;gain:GainNode;pan:StereoPannerNode}[]=[];private transientIndex=0;
   private lastShift=-1;private lastThrottle=0;private lastPop=0;
+  private crashNoise?:GainNode;private crashPan?:StereoPannerNode;private scrapeNoise?:GainNode;private scrapePan?:StereoPannerNode;
   private tyreNoise?:GainNode;private rumble?:GainNode;private skidOsc?:OscillatorNode;
   sirenGain?:GainNode;
   sirenOsc?:OscillatorNode;
@@ -67,7 +68,7 @@ export class AudioManager {
       brown = (brown + (Math.random() * 2 - 1) * 0.03) / 1.03;
       data[i] = brown * 5;
     }
-    const noise = (freq: number) => {
+    const noise = (freq: number,pan?:StereoPannerNode) => {
       const src = a.createBufferSource();
       src.buffer = buffer;
       src.loop = true;
@@ -78,13 +79,14 @@ export class AudioManager {
       gain.gain.value = 0;
       src.connect(filter);
       filter.connect(gain);
-      gain.connect(this.master!);
+      if(pan){gain.connect(pan);pan.connect(this.master!);}else gain.connect(this.master!);
       src.start();
       return gain;
     };
     this.wind = noise(1500);
     this.rain = noise(4200);this.tyreNoise=noise(3600);this.rumble=noise(180);
-    for(let i=0;i<8;i++){const osc=a.createOscillator(),gain=a.createGain();osc.type="triangle";gain.gain.value=0;osc.connect(gain);gain.connect(this.master);osc.start();this.transients.push({osc,gain});}
+    this.crashPan=a.createStereoPanner();this.crashNoise=noise(2800,this.crashPan);this.scrapePan=a.createStereoPanner();this.scrapeNoise=noise(1800,this.scrapePan);
+    for(let i=0;i<8;i++){const osc=a.createOscillator(),gain=a.createGain(),pan=a.createStereoPanner();osc.type="triangle";gain.gain.value=0;osc.connect(gain);gain.connect(pan);pan.connect(this.master);osc.start();this.transients.push({osc,gain,pan});}
     const sk = this.skidOsc = a.createOscillator();
     sk.type = "triangle";
     sk.frequency.value = 780;
@@ -112,10 +114,10 @@ export class AudioManager {
     this.sirenGain.gain.setTargetAtTime(active?.13*Math.max(.1,1-Math.min(300,distance)/300):0,t,.1);
     this.sirenOsc.frequency.setTargetAtTime(730+Math.sin(t*6)*270,t,.025);
   }
-  private pulse(frequency:number,duration:number,volume:number){
+  private pulse(frequency:number,duration:number,volume:number,pan=0){
     const a=this.context;if(!a||!this.transients.length)return;
     const slot=this.transients[this.transientIndex++%this.transients.length],t=a.currentTime;
-    slot.osc.frequency.cancelScheduledValues(t);slot.osc.frequency.setValueAtTime(frequency,t);slot.osc.frequency.exponentialRampToValueAtTime(Math.max(25,frequency*.45),t+duration);
+    slot.pan.pan.setValueAtTime(Math.max(-.8,Math.min(.8,pan)),t);slot.osc.frequency.cancelScheduledValues(t);slot.osc.frequency.setValueAtTime(frequency,t);slot.osc.frequency.exponentialRampToValueAtTime(Math.max(25,frequency*.45),t+duration);
     slot.gain.gain.cancelScheduledValues(t);slot.gain.gain.setValueAtTime(.0001,t);slot.gain.gain.linearRampToValueAtTime(volume,t+.006);slot.gain.gain.exponentialRampToValueAtTime(.0001,t+duration);
   }
   tone(frequency:number,duration:number,volume:number,delay=0) {
@@ -128,16 +130,8 @@ export class AudioManager {
   }
   click(volume:number) {this.start();this.master!.gain.setValueAtTime(volume*.7,this.context!.currentTime);this.tone(640,.06,.16);}
   coin() {this.tone(1046,.13,.24);this.tone(1568,.2,.16,.075);}
-  explosion(severity:number) {
-    const a=this.context;if(!a||!this.master)return;
-    const t=a.currentTime;this.lastImpact=t;
-    const buffer=a.createBuffer(1,a.sampleRate*.7,a.sampleRate),data=buffer.getChannelData(0);
-    for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*Math.exp(-i/data.length*4);
-    const src=a.createBufferSource(),filter=a.createBiquadFilter(),gain=a.createGain();
-    src.buffer=buffer;filter.type="lowpass";filter.frequency.setValueAtTime(2800,t);filter.frequency.exponentialRampToValueAtTime(100,t+.65);
-    gain.gain.setValueAtTime(severity*.8,t);gain.gain.exponentialRampToValueAtTime(.001,t+.7);
-    src.connect(filter);filter.connect(gain);gain.connect(this.master);src.start();
-    src.onended=()=>{src.disconnect();filter.disconnect();gain.disconnect()};this.tone(48,.5,severity*.6);
+  explosion(severity:number,pan=0) {
+    const a=this.context;if(!a||!this.crashNoise)return;const t=a.currentTime;this.lastImpact=t;this.crashPan!.pan.setValueAtTime(Math.max(-.8,Math.min(.8,pan)),t);const g=this.crashNoise.gain;g.cancelScheduledValues(t);g.setValueAtTime(Math.max(.001,severity*.55),t);g.exponentialRampToValueAtTime(.001,t+.65);this.pulse(48,.5,severity*.5,pan);
   }
   update(
     car: VehiclePhysics,
@@ -150,6 +144,7 @@ export class AudioManager {
     if (!a) return;
     const t = a.currentTime;
     this.master!.gain.setTargetAtTime(s.volume * (active ? 1 : 0.22), t, 0.08);
+    this.scrapePan!.pan.setTargetAtTime(car.impactSide*.75,t,.06);this.scrapeNoise!.gain.setTargetAtTime(active?car.scrape*.10:0,t,.04);
     const voice=car.traits,tone=voice.timbre;
     for(let i=0;i<this.ratios.length;i++)this.oscillators[i].frequency.setTargetAtTime(car.rpm/60*voice.firing*this.ratios[i],t,.035);
     const gearChanged=this.lastShift>=0&&this.lastShift!==car.shiftSerial;
@@ -177,12 +172,12 @@ export class AudioManager {
       t,
       0.05,
     );
-    this.rain!.gain.setTargetAtTime(s.weather === "rain" ? 0.14 : 0, t, 0.3);
+    this.rain!.gain.setTargetAtTime(s.weather === "rain" ? .04+.10*s.rainIntensity : 0, t, 0.3);
     this.delayGain!.gain.setTargetAtTime(tunnel ? 0.5 : 0, t, 0.15);
     this.hornGain!.gain.setTargetAtTime(horn ? 0.075 : 0, t, 0.015);
     if (active && car.impact > 0.45 && t - this.lastImpact > 0.5) {
       this.lastImpact = t;
-      this.pulse(100,.25,car.impact*.4);
+      this.pulse(100,.25,car.impact*.4,car.impactSide);
     }
   }
 }

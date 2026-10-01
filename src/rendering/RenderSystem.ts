@@ -228,7 +228,7 @@ export class RenderSystem {
     fog.density = {
       clear: 0.00023,
       cloudy: 0.00065,
-      rain: 0.0011,
+      rain: 0.0006+this.settings.rainIntensity*.0009,
       fog: 0.0028,
     }[this.settings.weather]*Math.max(1,1600/this.settings.renderDistance);
     fog.color.set(

@@ -1,3 +1,7 @@
+import {RACE_ROUTES,routeRoad} from '../racing/RouteCatalog';
+import {routePreview} from './RoutePreview';
+import {wetness} from '../core/Weather';
+import {PavementUnion} from './PavementUnion';
 import {wallOpening} from "./RoadLandmarks";
 import {asphaltMaterial,dryFieldTexture,dryStoneMaterial} from '../rendering/RuralMaterials';
 import {DryGrass} from './DryGrass';
@@ -137,11 +141,11 @@ export class World {
         roughness: 0.9,
       }),
       white = new T.MeshStandardMaterial({ name:"solid-white-road-markings",color: "#f0f0e7", roughness: 0.85,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-20 });
+    const union=new PavementUnion(this.network);
     for (const road of this.network.roads) {
       const n = road.samples.length - 1;
-      const pavement=this.asphalt.clone();
-      // Deterministic depth bias resolves coplanar intersection surfaces without physical steps.
-      pavement.polygonOffset=true;pavement.polygonOffsetFactor=-1;pavement.polygonOffsetUnits=-1-this.network.roads.indexOf(road);
+      const pavement=this.asphalt;
+      const ribbon=(start:number,end:number,left:number,right:number,raise=0,skip?: (x:number,z:number)=>boolean,base=false)=>union.trim(roadRibbon(road,start,end,left,right,raise,skip),road,base);
       const junction=(x:number,z:number)=>{
         if(!this.network.inJunction(x,z))return false;
         for(const other of this.network.roads)if(other!==road&&this.network.nearest(x,z,false,other).distance<other.width/2+.5)return true;
@@ -153,7 +157,7 @@ export class World {
         const sector=new T.Group();this.roadsGroup.add(sector);
         const oldGroup=this.roadsGroup;this.roadsGroup=sector;
         const end = Math.min(n, i + 80),
-          g = roadRibbon(road, i, end, -road.width / 2, road.width / 2);
+          g = ribbon(i, end, -road.width / 2, road.width / 2,0,undefined,true);
         this.mesh(g, pavement);
         for(const side of [-1,1]){
           const verge=roadRibbon(road,i,end,side*(road.width/2+2.3),side*(road.width/2+14)),positions=verge.getAttribute('position');
@@ -164,12 +168,11 @@ export class World {
               else positions.setY(v,Math.min(roadHeight(sample,side*(road.width/2+2.3))-.05,this.terrainSampler.groundHeight(x,z)));
             }
           }
-          verge.computeVertexNormals();this.mesh(verge,this.vergeMaterial);
+          verge.computeVertexNormals();this.mesh(union.trim(verge,road),this.vergeMaterial);
         }
         for (const s of [-1, 1]) {
           this.mesh(
-            roadRibbon(
-              road,
+            ribbon(
               i,
               end,
               s * (road.width / 2),
@@ -179,8 +182,7 @@ export class World {
             concrete,
           ).material.side = T.DoubleSide;
           this.mesh(
-            roadRibbon(
-              road,
+            ribbon(
               i,
               end,
               s * (road.width / 2 - 0.48),
@@ -191,8 +193,8 @@ export class World {
             white,
           ).material.side = T.DoubleSide;
         }
-        for(const side of [-1,1])this.mesh(roadRibbon(road,i,end,side*(road.width/2+.45),side*(road.width/2+2.3)),this.vergeMaterial);
-        const centerLine=this.mesh(roadRibbon(road,i,end,-.085,.085,.018,junction),white);
+        for(const side of [-1,1])this.mesh(ribbon(i,end,side*(road.width/2+.45),side*(road.width/2+2.3)),this.vergeMaterial);
+        const centerLine=this.mesh(ribbon(i,end,-.085,.085,.018,junction),white);
         centerLine.name='Single solid white centre line';
         const grass=this.dryGrass.batch((end-i+1)*6),random=rng(i*917+this.network.roads.indexOf(road)*1177);
         for(let sample=i;sample<end;sample+=2){
@@ -376,7 +378,7 @@ export class World {
     for(const sector of this.roadSectors)sector.group.visible=sector.center.distanceToSquared(view)<(range+sector.radius)**2;
     for(const grass of this.grassSectors)grass.visible=this.dryGrass.visible(grass,view);
     this.city.visible=view.distanceToSquared(this.cityCenter)<(range+1300)**2;
-    const wet = this.settings.weather === "rain" ? 1 : 0;
+    const wet = wetness(this.settings);
     if (wet !== this.wet) {
       this.wet = wet;
       this.asphalt.roughness = lerp(0.94, 0.28, wet);
@@ -408,13 +410,17 @@ export class World {
         const h = 14 + random() ** 2 * 110,
           w = 28 + random() * 24,
           d = 28 + random() * 23,
-          base = this.network.height(x, z);
+          heights=[[-w/2,-d/2],[-w/2,d/2],[w/2,-d/2],[w/2,d/2],[0,0]].map(([dx,dz])=>this.terrainSampler.groundHeight(x+dx,z+dz)),
+          base = Math.max(...heights)+.12;
         if(!this.terrainSampler.vegetationClear(x,z,Math.hypot(w,d)/2+2))continue;
         const b = new T.Mesh(
           new T.BoxGeometry(w, h, d),
           random() > 0.35 ? glass : concrete,
         );
+        b.name='Terrain-fitted city building';
         b.position.set(x, base + h / 2, z);
+        const footBottom=Math.min(...heights,this.terrainSampler.height(x,z,64)-2)-.6,footHeight=base-footBottom;
+        const foundation=new T.Mesh(new T.BoxGeometry(w+.5,footHeight,d+.5),concrete);foundation.name='Solid city foundation';foundation.position.set(x,footBottom+footHeight/2,z);foundation.castShadow=foundation.receiveShadow=true;this.city.add(foundation);this.physics.box(x,footBottom+footHeight/2,z,w+.5,footHeight,d+.5);
         b.castShadow = b.receiveShadow = true;
         this.city.add(b);
         buildings.push(b);
@@ -510,11 +516,15 @@ export class World {
     const labels = [
       ["AZURE COAST", "HORIZON 01", 260],
       ["TUNNEL", "LIGHTS ON", 690],
-      ["REDWOOD RIDGE", "NOVA CITY  4 km", 1750],
-      ["SILVER CANYON", "KEEP RIGHT", 3800],
+      ["REDWOOD RIDGE", "FOREST BENDS", 1750],
+      ["SILVER CANYON", "SCENIC ROUTE", 3800],
     ];
-    for (const [top, bottom, d] of labels) {
-      const s = this.network.at(this.network.main, d as number),
+    const destinations=RACE_ROUTES.filter(r=>!r.closed).map(r=>{const road=routeRoad(this.network,r.id),info=routePreview(road);return [r.name.toUpperCase(),`${(road.length/1000).toFixed(1)} km  /  ${info.difficulty.toUpperCase()}`,150,road] as const;});
+    const approaches:[string,string,number,Road,number][]=[];
+    for(const r of RACE_ROUTES.filter(r=>!r.closed)){const branch=routeRoad(this.network,r.id);for(const end of [false,true]){const point=branch.samples[end?branch.samples.length-1:0];let parent:ReturnType<RoadNetwork['nearest']>|undefined;for(const other of this.network.roads)if(other!==branch){const h=this.network.nearest(point.p.x,point.p.z,false,other);if(!parent||h.distance<parent.distance)parent=h;}if(!parent||parent.distance>5)continue;for(const dir of [-1,1]){const d=parent.sample.d-dir*55;if(!parent.road.closed&&(d<0||d>parent.road.length))continue;const toward=branch.samples[end?branch.samples.length-5:4].p.clone().sub(point.p);const side=toward.dot(parent.sample.r)*dir;approaches.push([`${side<0?'←':'→'} ${r.name.toUpperCase()}`,`${(branch.length/1000).toFixed(1)} km SCENIC ROUTE`,d,parent.road,dir]);}}}
+    const entries=[...labels.map(([top,bottom,d])=>[top,bottom,d,this.network.main,1] as const),...destinations.map(e=>[...e,1] as const),...approaches];
+    for (const [top, bottom, d,road,dir] of entries) {
+      const s = this.network.at(road, d as number),
         canvas = document.createElement("canvas");
       canvas.width = 768;
       canvas.height = 320;
@@ -526,6 +536,7 @@ export class World {
       c.strokeRect(12, 12, 744, 296);
       c.fillStyle = "#f0f0df";
       c.font = "bold 58px Arial";
+      while(c.measureText(top as string).width>680){const size=parseInt(c.font.match(/\d+/)?.[0]||"58")-2;if(size<28)break;c.font=`bold ${size}px Arial`;}
       c.fillText(top as string, 45, 123);
       c.font = "34px Arial";
       c.fillText(bottom as string, 45, 230);
@@ -539,10 +550,10 @@ export class World {
           side: T.DoubleSide,
         }),
       );
-      sign.position.copy(s.p).addScaledVector(s.r, 14);
+      sign.position.copy(s.p).addScaledVector(s.r,dir*(road.width/2+6));
       sign.position.y += 4.5;
-      sign.rotation.y = Math.atan2(-s.t.x, -s.t.z);
-      this.roadsGroup.add(sign);
+      sign.rotation.y = Math.atan2(-s.t.x*dir, -s.t.z*dir);
+      const group=new T.Group();group.add(sign);this.roadsGroup.add(group);this.roadSectors.push({group,center:s.p.clone(),radius:12});
       for (const side of [-1, 1]) {
         const post = new T.Mesh(
           new T.CylinderGeometry(0.08, 0.08, 5, 8),
@@ -550,7 +561,7 @@ export class World {
         );
         post.position.copy(sign.position).addScaledVector(s.r, side * 2.3);
         post.position.y -= 2;
-        this.roadsGroup.add(post);
+        group.add(post);this.physics.box(post.position.x,post.position.y,post.position.z,.16,5,.16);
       }
     }
   }

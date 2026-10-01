@@ -1,3 +1,4 @@
+import {cleanName} from './Invites';
 import {CARS,carSpec} from "../vehicles/CarCatalog";
 import {RaceSettings,defaultRaceSettings,validRaceSettings,matchesClass} from "./LobbySettings";
 import { PROTOCOL, ROOM_PREFIX, normalizeCode, validCode, roomCode, validPose, Pose, MAX_PLAYERS, validRoster, validSlot } from './Protocol';
@@ -42,18 +43,19 @@ type Proposal = {id:string; settings:RaceSettings; laps:number; expires:number; 
 export class RaceConnection {
   host=false; code=''; connected=false; busy=false;
   ghost=true;
-  raceSettings=defaultRaceSettings();private racePreference=defaultRaceSettings();settingsVersion=0;localCar="vanta";
-  drivers=new Map<number,{ready:boolean;car:string}>([[0,{ready:true,car:"vanta"}]]);
+  raceSettings=defaultRaceSettings();private racePreference=defaultRaceSettings();settingsVersion=0;localCar="vanta";localName="Driver";lastRoom="";
+  drivers=new Map<number,{ready:boolean;car:string;name?:string;latency?:number}>([[0,{ready:true,car:"vanta"}]]);
   get raceReady(){return this.ready&&this.players.every(slot=>{const d=this.drivers.get(slot);return d?.ready&&matchesClass(carSpec(d.car),this.raceSettings.vehicleClass);});}
   get localReady(){return this.drivers.get(this.slot)?.ready??true;}
   prepareRace:(settings:RaceSettings)=>boolean|Promise<boolean>=()=>true;
   canRace:(settings:RaceSettings)=>boolean=()=>true;
+  setName(value:string){this.localName=cleanName(value);const d=this.drivers.get(this.slot);if(d)d.name=this.localName;if(this.connected)this.setReady(false);}
   setCar(id:string){if(!CARS.some(c=>c.id===id))return;this.localCar=id;if(this.connected)this.setReady(false);}
   setReady(ready:boolean){
     if(!this.connected||this.pendingRace||this.raceLocked)return false;
     const accepted=ready&&this.canStart()&&matchesClass(carSpec(this.localCar),this.raceSettings.vehicleClass);
-    this.drivers.set(this.slot,{ready:accepted,car:this.localCar});
-    if(this.host)this.publishLobby();else {const m=this.members.values().next().value;if(m)this.transmit(m,{t:"lobby-ready",ready:accepted,car:this.localCar});}
+    this.drivers.set(this.slot,{ready:accepted,car:this.localCar,name:this.localName,latency:this.latency});
+    if(this.host)this.publishLobby();else {const m=this.members.values().next().value;if(m)this.transmit(m,{t:"lobby-ready",ready:accepted,car:this.localCar,name:this.localName});}
     this.onChange();return accepted===ready;
   }
   setRaceSettings(settings:RaceSettings){
@@ -97,7 +99,7 @@ export class RaceConnection {
   async open(host:boolean,rawCode=''){
     const code=normalizeCode(rawCode);
     if(!host&&!validCode(code)){this.change('Enter exactly four letters, A–Z.');return;}
-    this.leave(false);this.raceSettings=host?{...this.racePreference}:defaultRaceSettings();this.settingsVersion=JSON.stringify(this.raceSettings)===JSON.stringify(defaultRaceSettings())?0:1;this.ghost=host?this.ghostPreference:true;this.host=host;this.slot=host?0:-1;this.code=host?'':code;this.busy=true;
+    this.leave(false);this.raceSettings=host?{...this.racePreference}:defaultRaceSettings();this.settingsVersion=JSON.stringify(this.raceSettings)===JSON.stringify(defaultRaceSettings())?0:1;this.ghost=host?this.ghostPreference:true;this.host=host;this.slot=host?0:-1;this.code=host?'':code;if(!host)this.lastRoom=code;this.busy=true;
     const epoch=this.epoch;this.change('Loading multiplayer…');
     try{
       const Peer=await this.loader();if(epoch!==this.epoch)return;
@@ -181,17 +183,17 @@ export class RaceConnection {
       this.onChange();return;
     }
     if(this.host&&data.t==='lobby-ready'&&typeof data.ready==='boolean'&&CARS.some(c=>c.id===data.car)&&!this.pendingRace&&!this.raceLocked){
-      this.drivers.set(m.slot,{ready:data.ready&&matchesClass(carSpec(data.car),this.raceSettings.vehicleClass),car:data.car});this.publishLobby();return;
+      this.drivers.set(m.slot,{ready:data.ready&&matchesClass(carSpec(data.car),this.raceSettings.vehicleClass),car:data.car,name:cleanName(data.name),latency:m.latency});this.publishLobby();return;
     }
     if(!this.host&&data.t==='lobby'&&Array.isArray(data.drivers)&&data.drivers.length===this.players.length&&new Set(data.drivers.map((d:any)=>d.slot)).size===this.players.length&&data.drivers.every((d:any)=>this.players.includes(d.slot)&&typeof d.ready==='boolean'&&CARS.some(c=>c.id===d.car))){
-      this.drivers.clear();for(const d of data.drivers)this.drivers.set(d.slot,{ready:d.ready,car:d.car});this.onChange();return;
+      this.drivers.clear();for(const d of data.drivers)this.drivers.set(d.slot,{ready:d.ready,car:d.car,name:cleanName(d.name),latency:Number.isFinite(d.latency)?Math.max(0,Math.min(10000,d.latency)):0});this.onChange();return;
     }
     if(data.t==='ping' &&Number.isFinite(data.at)){
       m.seen=this.now();this.transmit(m,{t:'pong',at:data.at,now:this.now()});return;
     }
     if(data.t==='pong'&&Number.isFinite(data.at)&&Number.isFinite(data.now)){
       const rtt=this.now()-data.at;if(rtt<0||rtt>10000)return;
-      m.seen=this.now();m.clock=true;m.latency=Math.round(rtt);
+      m.seen=this.now();m.clock=true;m.latency=Math.round(rtt);if(this.host){const d=this.drivers.get(m.slot);if(d)d.latency=m.latency;this.publishLobby();}
       this.latency=Math.max(0,...Array.from(this.members.values()).map(v=>v.latency));
       if(!this.host){const offset=data.now-(data.at+this.now())/2;this.clockOffset=this.clockReady?this.clockOffset*.7+offset*.3:offset;this.clockReady=true;}
       this.onChange();return;
@@ -241,7 +243,7 @@ export class RaceConnection {
     const before=this.connected;
     for(const old of this.players)if(!slots.includes(old))this.lastSeq.delete(old);
     this.players=[...slots];
-    for(const slot of slots)if(!this.drivers.has(slot))this.drivers.set(slot,{ready:true,car:slot===this.slot?this.localCar:"vanta"});
+    for(const slot of slots)if(!this.drivers.has(slot))this.drivers.set(slot,{ready:true,car:slot===this.slot?this.localCar:"vanta",name:slot===this.slot?this.localName:"Driver",latency:0});
     for(const slot of this.drivers.keys())if(!slots.includes(slot))this.drivers.delete(slot);this.connected=this.host?slots.length>1:slots.includes(this.slot)&&this.slot>0;
     this.onRoster(this.players);
     if(!before&&this.connected){this.onConnected();if(!this.host)this.setReady(true);}
@@ -321,7 +323,7 @@ export class RaceConnection {
     const hadConnection=this.connected;this.epoch++;clearInterval(this.timer);this.timer=undefined;
     const members=Array.from(this.members.values()),peer=this.peer;this.members.clear();this.peer=undefined;
     this.connected=false;this.busy=false;this.ghost=true;this.host=false;this.code='';this.session='';this.pendingRace=false;this.raceLocked=false;
-    this.proposal=undefined;this.settingsVersion=0;this.raceSettings=defaultRaceSettings();this.drivers.clear();this.drivers.set(0,{ready:true,car:this.localCar});this.players=[0];this.racers=[];this.slot=0;this.finishedSlots.clear();this.lastSeq.clear();
+    this.proposal=undefined;this.settingsVersion=0;this.raceSettings=defaultRaceSettings();this.drivers.clear();this.drivers.set(0,{ready:true,car:this.localCar,name:this.localName,latency:0});this.players=[0];this.racers=[];this.slot=0;this.finishedSlots.clear();this.lastSeq.clear();
     this.clockReady=false;this.clockOffset=0;this.latency=0;this.deadline=0;
     for(const m of members)try{m.link.close();}catch{}try{peer?.destroy();}catch{}
     this.onRoster(this.players);if(hadConnection)this.onDisconnected();
