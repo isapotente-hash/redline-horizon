@@ -1,6 +1,8 @@
 import * as T from "three";
 import { clamp, fbm, lerp, smooth, wrap } from "../core/math";
-export type Sample = { p: T.Vector3; t: T.Vector3; r: T.Vector3; d: number };
+export type Sample = { p: T.Vector3; t: T.Vector3; r: T.Vector3; d: number; bank?:number;crossSlope?:number };
+export const roadHeight=(s:Sample,offset=0)=>s.p.y+(Math.tan(s.bank||0)+(s.crossSlope||0))*offset;
+export const surfaceBank=(s:Sample)=>Math.atan(Math.tan(s.bank||0)+(s.crossSlope||0));
 export type Road = {
   name: string;
   curve: T.CatmullRomCurve3;
@@ -23,7 +25,7 @@ export class RoadNetwork {
   readonly layoutVersion=2;
   bounds={minX:0,maxX:0,minZ:0,maxZ:0};
   structures:{road:Road;start:number;end:number;kind:"tunnel"|"bridge"}[]=[];
-  junctions: {x:number;z:number;y:number;radius:number}[] = [];
+  junctions: {x:number;z:number;y:number;radius:number;parentRoad?:Road}[] = [];
   private ready = false;
   inJunction(x:number,z:number,margin=0) { return this.junctions.some(j=>Math.hypot(x-j.x,z-j.z)<j.radius+margin); }
   /** Find true XZ crossings and shared endpoints, then give all approaches a common flat core. */
@@ -170,6 +172,9 @@ export class RoadNetwork {
     const coast=this.add("SOUTH COAST",14,false,[[-550,26,1000],[-350,24,1960],[-500,28,2750],[-1060,39,3240],[-1780,34,3400],[-2260,28,2980],[-2230,29,2270]]);
     this.add("ZENITH INDUSTRIAL",14,false,[[-550,26,1000],[-900,25,1620],[-700,24,2150],[-350,24,1960]]);
     this.joinRoads();
+    const established=[...this.roads];
+    const bracken=this.add("BRACKEN LANE",7.8,false,[[-1900,25,-540],[-2220,33,-625],[-2490,48,-580],[-2730,66,-400],[-2780,80,-180],[-2570,53,35],[-2540,61,240],[-2310,40,465],[-2030,27,620]]);
+    const switchbacks=this.add("HIGHLAND SWITCHBACKS",8.2,false,[[-2600,355,-4730],[-2510,381,-5050],[-2500,399,-5380],[-2620,405,-5500],[-2810,391,-5500],[-2880,386,-5410],[-2690,372,-5300],[-2690,360,-5200],[-2880,352,-5180],[-3060,327,-5260],[-3270,286,-5220],[-3410,238,-4900]]);
     this.structures=[{road:this.main,start:760,end:1000,kind:"tunnel"},{road:summit,start:1050,end:1390,kind:"tunnel"},{road:coast,start:1300,end:1660,kind:"bridge"}];
 
     this.ready = true;
@@ -182,6 +187,38 @@ export class RoadNetwork {
         if (!this.grid.has(k)) this.grid.set(k, []);
         this.grid.get(k)!.push({ road, i });
       }
+    // Attach added branches to the existing graded pavement. Do not re-flatten
+    // established routes just because a new side road shares a control point.
+    for(const road of [bracken,switchbacks]){
+      const ends=[road.samples[0],road.samples.at(-1)!];
+      for(const end of ends){
+        let best:RoadHit|undefined;
+        for(const parent of established){const hit=this.nearest(end.p.x,end.p.z,false,parent);if(!best||hit.distance<best.distance)best=hit;}
+        if(!best||best.distance>4)throw new Error(`Disconnected scenic road: ${road.name}`);
+        const parent=best.road;
+        this.junctions.push({x:end.p.x,z:end.p.z,y:best.height,radius:30,parentRoad:parent});
+        for(const sample of road.samples){
+          const gap=sample.p.distanceTo(end.p);if(gap>220)continue;
+          const h=this.nearest(sample.p.x,sample.p.z,true,parent);
+          if(Number.isFinite(h.distance)){
+            const blend=1-smooth(75,220,gap);sample.p.y=lerp(sample.p.y,h.height,blend);
+            const t=h.sample.t,horizontal=t.x*t.x+t.z*t.z;
+            sample.crossSlope=(t.x*sample.r.x+t.z*sample.r.z)*t.y/Math.max(.01,horizontal)*blend;
+          }
+        }
+      }
+      let length=0;
+      for(let i=0;i<road.samples.length;i++){
+        const s=road.samples[i],a=road.samples[Math.max(0,i-1)],b=road.samples[Math.min(road.samples.length-1,i+1)];
+        s.t.copy(b.p).sub(a.p).normalize();s.r.set(-s.t.z,0,s.t.x).normalize();if(i)length+=s.p.distanceTo(road.samples[i-1].p);s.d=length;
+      }
+      road.length=length;
+      for(let i=0;i<road.samples.length;i++){
+        const a=road.samples[Math.max(0,i-2)],b=road.samples[Math.min(road.samples.length-1,i+2)],s=road.samples[i];
+        const turn=Math.atan2(a.t.x*b.t.z-a.t.z*b.t.x,a.t.x*b.t.x+a.t.z*b.t.z),fade=smooth(0,120,s.d)*(1-smooth(road.length-120,road.length,s.d));
+        s.bank=this.inJunction(s.p.x,s.p.z,45)?0:clamp(-turn*.45,-.055,.055)*fade;
+      }
+    }
   }
   key(x: number, z: number) {
     return `${Math.floor(x / 100)},${Math.floor(z / 100)}`;
@@ -206,7 +243,7 @@ export class RoadNetwork {
     if(this.ready) {
       const distance=road.closed?wrap(d,road.length):clamp(d,0,road.length),index=this.sampleIndex(road,distance),i=index,u=(distance-road.samples[i].d)/(road.samples[i+1].d-road.samples[i].d);
       const a=road.samples[i],b=road.samples[i+1],t=a.t.clone().lerp(b.t,u).normalize();
-      return {p:a.p.clone().lerp(b.p,u),t,r:new T.Vector3(-t.z,0,t.x).normalize(),d:distance};
+      return {p:a.p.clone().lerp(b.p,u),t,r:new T.Vector3(-t.z,0,t.x).normalize(),d:distance,bank:lerp(a.bank||0,b.bank||0,u),crossSlope:lerp(a.crossSlope||0,b.crossSlope||0,u)};
     }
     const u =
         (road.closed ? wrap(d, road.length) : clamp(d, 0, road.length)) /
@@ -241,9 +278,10 @@ export class RoadNetwork {
     if (!Number.isFinite(bestDistance)) return {road:this.main,sample:this.main.samples[0],distance:Infinity,offset:0,height:24};
     const a = bestRoad.samples[bestIndex], b = bestRoad.samples[bestIndex + 1];
     const p = a.p.clone().lerp(b.p, bestF), r = a.r.clone().lerp(b.r, bestF).normalize();
-    return {road:bestRoad, sample:{p, r, t:a.t.clone().lerp(b.t, bestF).normalize(),
+    const offset=(x-p.x)*r.x+(z-p.z)*r.z,bank=lerp(a.bank||0,b.bank||0,bestF),crossSlope=lerp(a.crossSlope||0,b.crossSlope||0,bestF);
+    return {road:bestRoad, sample:{p, r, t:a.t.clone().lerp(b.t, bestF).normalize(),bank,crossSlope,
       d:lerp(a.d, b.d === 0 ? bestRoad.length : b.d, bestF)},
-      distance:Math.sqrt(bestDistance), offset:(x-p.x)*r.x+(z-p.z)*r.z, height:p.y};
+      distance:Math.sqrt(bestDistance), offset, height:p.y+(Math.tan(bank)+crossSlope)*offset};
   }
   rawHeight(x: number, z: number) {
     const coast = 150 + Math.sin(z * 0.0018) * 90,

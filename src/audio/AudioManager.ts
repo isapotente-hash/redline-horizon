@@ -12,6 +12,10 @@ export class AudioManager {
   delayGain?: GainNode;
   hornGain?: GainNode;
   lastImpact = 0;
+  private readonly ratios=[.5,1,1.005,2];
+  private readonly transients:{osc:OscillatorNode;gain:GainNode}[]=[];private transientIndex=0;
+  private lastShift=-1;private lastThrottle=0;private lastPop=0;
+  private tyreNoise?:GainNode;private rumble?:GainNode;private skidOsc?:OscillatorNode;
   sirenGain?:GainNode;
   sirenOsc?:OscillatorNode;
   start() {
@@ -45,7 +49,7 @@ export class AudioManager {
     for (let i = 1; i < 24; i++)
       imag[i] = (1 / Math.pow(i, 1.1)) * (i % 2 ? 0.8 : 1);
     const wave = a.createPeriodicWave(real, imag);
-    for (const ratio of [0.5, 1, 1.005, 2]) {
+    for (const ratio of this.ratios) {
       const o = a.createOscillator();
       o.setPeriodicWave(wave);
       o.frequency.value = 30 * ratio;
@@ -79,8 +83,9 @@ export class AudioManager {
       return gain;
     };
     this.wind = noise(1500);
-    this.rain = noise(4200);
-    const sk = a.createOscillator();
+    this.rain = noise(4200);this.tyreNoise=noise(3600);this.rumble=noise(180);
+    for(let i=0;i<8;i++){const osc=a.createOscillator(),gain=a.createGain();osc.type="triangle";gain.gain.value=0;osc.connect(gain);gain.connect(this.master);osc.start();this.transients.push({osc,gain});}
+    const sk = this.skidOsc = a.createOscillator();
     sk.type = "triangle";
     sk.frequency.value = 780;
     this.skid = a.createGain();
@@ -106,6 +111,12 @@ export class AudioManager {
     const t=this.context.currentTime;
     this.sirenGain.gain.setTargetAtTime(active?.13*Math.max(.1,1-Math.min(300,distance)/300):0,t,.1);
     this.sirenOsc.frequency.setTargetAtTime(730+Math.sin(t*6)*270,t,.025);
+  }
+  private pulse(frequency:number,duration:number,volume:number){
+    const a=this.context;if(!a||!this.transients.length)return;
+    const slot=this.transients[this.transientIndex++%this.transients.length],t=a.currentTime;
+    slot.osc.frequency.cancelScheduledValues(t);slot.osc.frequency.setValueAtTime(frequency,t);slot.osc.frequency.exponentialRampToValueAtTime(Math.max(25,frequency*.45),t+duration);
+    slot.gain.gain.cancelScheduledValues(t);slot.gain.gain.setValueAtTime(.0001,t);slot.gain.gain.linearRampToValueAtTime(volume,t+.006);slot.gain.gain.exponentialRampToValueAtTime(.0001,t+duration);
   }
   tone(frequency:number,duration:number,volume:number,delay=0) {
     const a=this.context;if(!a||!this.master)return;
@@ -139,19 +150,18 @@ export class AudioManager {
     if (!a) return;
     const t = a.currentTime;
     this.master!.gain.setTargetAtTime(s.volume * (active ? 1 : 0.22), t, 0.08);
-    [0.5, 1, 1.005, 2].forEach((ratio, i) =>
-      this.oscillators[i].frequency.setTargetAtTime(
-        (car.rpm / 60) * 2 * ratio,
-        t,
-        0.035,
-      ),
-    );
-    this.engine!.gain.setTargetAtTime(0.025 + car.throttle * 0.07, t, 0.04);
-    this.filter!.frequency.setTargetAtTime(
-      380 + car.rpm * 0.19 + car.throttle * 1000,
-      t,
-      0.06,
-    );
+    const voice=car.traits,tone=voice.timbre;
+    for(let i=0;i<this.ratios.length;i++)this.oscillators[i].frequency.setTargetAtTime(car.rpm/60*voice.firing*this.ratios[i],t,.035);
+    const gearChanged=this.lastShift>=0&&this.lastShift!==car.shiftSerial;
+    if(active&&car.speed>4&&gearChanged)this.pulse(110*tone,.10,.07);
+    if(active&&car.rpm>3800&&car.speed>8&&this.lastThrottle>.5&&car.throttle<.15&&t-this.lastPop>.55){this.lastPop=t;this.pulse(68*tone,.13,.09);}
+    this.lastShift=car.shiftSerial;this.lastThrottle=car.throttle;
+    this.engine!.gain.setTargetAtTime((.023+car.throttle*.09)*(car.shiftTimer>0?.48:1)*(1.08-tone*.12),t,.04);
+    this.filter!.frequency.setTargetAtTime((320+car.rpm*.17+car.throttle*1250)*tone,t,.05);
+    const slip=car.contacts>=(car.bike?2:3)?Math.min(.065,Math.max(0,Math.abs(car.slip)-.13)*car.speed*.006):0;
+    this.tyreNoise!.gain.setTargetAtTime(slip*(car.surface==='ASPHALT'?1:.55),t,.04);
+    this.skidOsc!.frequency.setTargetAtTime(480+Math.min(480,car.speed*3+Math.abs(car.slip)*300),t,.08);
+    this.rumble!.gain.setTargetAtTime(active&&car.contacts>0&&(car.surface==='GRASS'||car.surface==='GRAVEL')?Math.min(.08,car.speed*.0015):0,t,.08);
     this.wind!.gain.setTargetAtTime(
       Math.min(0.17, car.speed * car.speed * 0.000026),
       t,
@@ -172,16 +182,7 @@ export class AudioManager {
     this.hornGain!.gain.setTargetAtTime(horn ? 0.075 : 0, t, 0.015);
     if (active && car.impact > 0.45 && t - this.lastImpact > 0.5) {
       this.lastImpact = t;
-      const o = a.createOscillator(),
-        g = a.createGain();
-      o.frequency.setValueAtTime(100, t);
-      o.frequency.exponentialRampToValueAtTime(28, t + 0.22);
-      g.gain.setValueAtTime(car.impact * 0.4, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
-      o.connect(g);
-      g.connect(this.master!);
-      o.start();
-      o.stop(t + 0.26);
+      this.pulse(100,.25,car.impact*.4);
     }
   }
 }

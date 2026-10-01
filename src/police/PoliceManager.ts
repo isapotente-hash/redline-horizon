@@ -14,13 +14,15 @@ export class PoliceManager {
   units: {car:VehiclePhysics; visual:ReturnType<typeof makeCar>; cursor:number; lane:number; road?:Road; direction:number; nextPlan:number; input:Controls; red:T.MeshBasicMaterial;blue:T.MeshBasicMaterial}[]=[];
   trail=Array.from({length:512},()=>new T.Vector3());head=0;clock=0;limit=0;nearest=Infinity;
   disabled=false;
+  seen=true;private nextSight=0;
+  private readonly sightOrigin=new T.Vector3();private readonly sightDirection=new T.Vector3();private readonly sightRay=new R.Ray(this.sightOrigin,this.sightDirection);
   clearWanted(){this.rules.finish(false);this.rules.cooldown=0;this.hide();this.nearest=Infinity;}
   message='';messageSerial=0;lastFine=0;
   constructor(public roads:RoadNetwork,public physics:PhysicsWorld,public save:SaveManager) {
     this.zones=new SpeedZones(roads);
     for(let i=0;i<2;i++) {
       const car=new VehiclePhysics(physics,roads,{...save.settings,automatic:true,stability:true,traction:true}),visual=makeCar(false);
-      car.spec={...car.spec,power:car.spec.power*1.85,topSpeed:88,handling:1.12};
+      car.spec={...car.spec,power:car.spec.power*1.95,topSpeed:96,handling:1.14};
       car.body.setEnabled(false);visual.root.visible=false;
       visual.paint.color.set('#e7ebef');visual.body.position.y=-.545;
       const stripe=new T.Mesh(new T.BoxGeometry(1.94,.2,3.3),new T.MeshStandardMaterial({color:0x142637}));stripe.position.y=.18;visual.root.add(stripe);
@@ -33,6 +35,7 @@ export class PoliceManager {
   get active(){return this.rules.active;}
   say(message:string){this.message=message;this.messageSerial++;}
   start(player:VehiclePhysics) {
+    this.seen=true;this.nextSight=0;
     const hit=this.roads.nearest(player.position.x,player.position.z,true),direction=player.forward.dot(hit.sample.t)>=0?1:-1;
     this.head=24;
     for(let i=0;i<=24;i++) {
@@ -47,7 +50,7 @@ export class PoliceManager {
       unit.car.body.setLinvel({x:a.t.x*direction*Math.min(25,player.speed),y:0,z:a.t.z*direction*Math.min(25,player.speed)},true);
       unit.cursor=index+2;unit.lane=clamp(hit.offset,-3,3);unit.road=hit.road;unit.direction=direction;unit.nextPlan=0;unit.visual.root.visible=true;
     }
-    this.say('POLICE PURSUIT · Escape beyond 220 m for 8 seconds, or pull over');
+    this.say('POLICE PURSUIT · Break line of sight to escape');
   }
   hide(){for(const u of this.units){u.car.body.setEnabled(false);u.visual.root.visible=false;}}
   physicallyIntercepts(player:VehiclePhysics){
@@ -74,8 +77,18 @@ export class PoliceManager {
     this.clock+=dt;this.limit=racing?0:this.zones.limitAt(player.position);
     this.nearest=Infinity;
     if(this.active)for(const u of this.units)if(u.car.body.isEnabled())this.nearest=Math.min(this.nearest,u.car.position.distanceTo(player.position));
+    if(this.active&&this.clock>=this.nextSight){
+      this.nextSight=this.clock+.1;this.seen=false;
+      for(const u of this.units){
+        if(!u.car.body.isEnabled()||u.car.position.distanceToSquared(player.position)>260**2)continue;
+        this.sightOrigin.copy(u.car.position);this.sightOrigin.y+=.6;this.sightDirection.copy(player.position);this.sightDirection.y+=.35;this.sightDirection.sub(this.sightOrigin);
+        const length=this.sightDirection.length();if(length<1){this.seen=true;break;}this.sightDirection.divideScalar(length);
+        const hit=this.physics.world.castRay(this.sightRay,length,true,R.QueryFilterFlags.EXCLUDE_SENSORS,undefined,undefined,u.car.body,c=>c.parent()?.handle!==player.body.handle);
+        if(!hit){this.seen=true;break;}
+      }
+    }
     const detectionLimit=player.crashCooldown>0||player.contacts<2?0:this.limit;
-    const event=this.rules.tick(dt,player.speed*3.6,detectionLimit,this.nearest,racing,this.physicallyIntercepts(player));
+    const event=this.rules.tick(dt,player.speed*3.6,detectionLimit,this.nearest,racing,this.physicallyIntercepts(player),this.seen);
     if(event==='start')this.start(player);
     if(event==='caught')this.caught(player);
     if(event==='escaped'){this.hide();this.say('PURSUIT ESCAPED · No fine');}
@@ -100,7 +113,7 @@ export class PoliceManager {
     if(u.road!==here.road)u.direction=car.forward.dot(here.sample.t)>=0?1:-1;
     u.road=here.road;
     const road=here.road,direction=u.direction,look=10+car.speed*.5,gap=car.position.distanceTo(player.position),edge=road.width/2-1.8;
-    let desired=Math.min(84,Math.max(20,player.speed+12+Math.min(14,gap*.045)));
+    let desired=Math.min(84+this.rules.stage*2.5,Math.max(20,player.speed+10+this.rules.stage*2+Math.min(14,gap*.045)));
     let target:T.Vector3;
     if(road===playerHit.road){
       const signed=road.closed?wrap((playerHit.sample.d-here.sample.d)*direction+road.length/2,road.length)-road.length/2:(playerHit.sample.d-here.sample.d)*direction;
@@ -110,7 +123,8 @@ export class PoliceManager {
       const peers=traffic.concat(this.units.filter(other=>other!==u&&other.car.body.isEnabled()).map(other=>{const h=this.roads.nearest(other.car.position.x,other.car.position.z,false,road);return {road,d:h.sample.d,lane:h.offset,speed:other.car.speed,direction:other.direction};}));
       const route=navigate(road,here.sample.d,direction,car.speed,here.offset,u.lane,{cars:peers,preferredLane:gap<130?intercept:road.width*.23*direction});
       u.lane+=clamp(route.lane-u.lane,-.42,.42);desired=Math.min(desired,route.speedLimit);
-      target=this.roads.at(road,here.sample.d+direction*look).p.clone().addScaledVector(this.roads.at(road,here.sample.d+direction*look).r,u.lane);
+      const lead=index===1&&signed>0&&gap<80&&this.rules.stage>=2?Math.min(12,player.speed*.45):0;
+      const aim=this.roads.at(road,here.sample.d+direction*(look+lead));target=aim.p.clone().addScaledVector(aim.r,u.lane);
       // Pull alongside with a small closing speed; avoid blindly ramming a stopped car.
       if(index===0&&signed>=0&&gap<25)desired=Math.min(desired,Math.max(0,player.speed+(gap-6)*.85));
       if(signed< -8){desired=Math.min(desired,Math.max(0,player.speed-5));}

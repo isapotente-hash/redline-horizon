@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import * as T from 'three';
 import {asphaltMaterial,dryFieldTexture,dryStoneMaterial} from '../src/rendering/RuralMaterials';import {DryGrass} from '../src/world/DryGrass';
-import {barrierGeometry} from '../src/world/CollisionGeometry';import {RoadNetwork} from '../src/world/RoadNetwork';import {TerrainSampler} from '../src/world/TerrainSampler';
+import {barrierGeometry} from '../src/world/CollisionGeometry';import {RoadNetwork,roadHeight} from '../src/world/RoadNetwork';import {TerrainSampler} from '../src/world/TerrainSampler';
 const roads=new RoadNetwork();
 test('asphalt is neutral grey with real aggregate relief; wall textures contain stone, crevices and upright coping',()=>{
  const road=asphaltMaterial(),stone=dryStoneMaterial(),field=dryFieldTexture();
@@ -13,7 +13,7 @@ test('dry stone walls follow grades continuously, keep clear of pavement and hav
   const g=barrierGeometry(road,0,road.samples.length-1,side),p=g.getAttribute('position'),uv=g.getAttribute('uv');assert.equal(p.count,uv.count);
   for(let i=0;i<p.count;i++){
    const a=road.samples[Math.floor(i/4)],offset=(p.getX(i)-a.p.x)*a.r.x+(p.getZ(i)-a.p.z)*a.r.z;
-   assert.ok(Math.abs(offset)>road.width/2+1.3-.001);const h=p.getY(i)-a.p.y;assert.ok(h>=-.121&&h<=1.001);assert.ok(Number.isFinite(uv.getX(i)));
+   assert.ok(Math.abs(offset)>road.width/2+1.3-.001);const h=p.getY(i)-roadHeight(a,offset);assert.ok(h>=-.121&&h<=1.001);assert.ok(Number.isFinite(uv.getX(i)));
   }
   const split=Math.min(80,road.samples.length-2),b=barrierGeometry(road,split,Math.min(split+80,road.samples.length-1),side),q=b.getAttribute('position');for(let j=0;j<4;j++)for(let axis=0;axis<3;axis++)assert.equal(p.getComponent(split*4+j,axis),q.getComponent(j,axis));b.dispose();g.dispose();
  }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
-import {RoadNetwork} from '../src/world/RoadNetwork';
+import {RoadNetwork,roadHeight} from '../src/world/RoadNetwork';
 import {TerrainSampler} from '../src/world/TerrainSampler';
 import {makeTreeVariants} from '../src/world/TreeModel';
 
@@ -16,7 +16,7 @@ test('near and distant terrain stay beneath all roads, edges and shoulders',()=>
  for(const road of roads.roads)for(let i=0;i<road.samples.length-1;i+=2){
   const a=road.samples[i],b=road.samples[i+1];
   for(const f of [.2,.8])for(const lane of [-1,-.5,0,.5,1]){
-   const offset=(road.width/2+1.6)*lane,x=T.MathUtils.lerp(a.p.x+a.r.x*offset,b.p.x+b.r.x*offset,f),z=T.MathUtils.lerp(a.p.z+a.r.z*offset,b.p.z+b.r.z*offset,f),height=T.MathUtils.lerp(a.p.y,b.p.y,f);
+   const offset=(road.width/2+1.6)*lane,x=T.MathUtils.lerp(a.p.x+a.r.x*offset,b.p.x+b.r.x*offset,f),z=T.MathUtils.lerp(a.p.z+a.r.z*offset,b.p.z+b.r.z*offset,f),height=T.MathUtils.lerp(roadHeight(a,offset),roadHeight(b,offset),f);
    const cx=Math.floor(x/256),cz=Math.floor(z/256),key=`${cx},${cz}`;
    if(!chunks.has(key))chunks.set(key,sampler.geometry(cx*256,cz*256,256,24));
    const fx=Math.floor(x/1024)*1024,fz=Math.floor(z/1024)*1024,fkey=`${fx},${fz}`;

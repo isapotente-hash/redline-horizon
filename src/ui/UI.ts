@@ -1,3 +1,5 @@
+import {performanceEstimate} from "../vehicles/VehicleTraits";
+import {RACE_ROUTES,PRACTICE_SECTIONS,routeRoad} from "../racing/RouteCatalog";
 import {mobileDevice} from "../input/DevicePolicy";
 import { speedometerMarkup, updateSpeedometer } from "./Speedometer";
 import {RouteChoice} from "../vehicles/AutopilotRoutes";
@@ -5,7 +7,7 @@ import {REGION_LABELS} from "../world/RegionalScenery";
 import {isBike,chassisFor} from '../vehicles/CarCatalog';
 import {PoliceManager} from '../police/PoliceManager';
 import {CARS} from "../vehicles/CarCatalog";
-import { UPGRADES, UPGRADE_SLOTS, tuneFor } from "../vehicles/UpgradeCatalog";
+import { STOCK, UPGRADES, UPGRADE_SLOTS, tuneFor } from "../vehicles/UpgradeCatalog";
 import { SaveManager, Settings } from "../core/SaveManager";
 import { VehiclePhysics } from "../physics/VehiclePhysics";
 import { RoadNetwork } from "../world/RoadNetwork";
@@ -16,6 +18,7 @@ import { timeText, clamp } from "../core/math";
 export type State =
   | "loading"
   | "menu"
+  | "activities"
   | "statistics"
   | "leaderboard"
   | "dev"
@@ -32,6 +35,8 @@ export type State =
 const button = (action: string, label: string, cls = "") =>
   `<button data-action="${action}" class="${cls}">${label}</button>`;
 export class UI {
+  private mobile=false;
+  practiceName="";
   police?:PoliceManager;
   root: HTMLElement;
   state: State = "loading";
@@ -52,7 +57,7 @@ export class UI {
     public input: InputManager,
   ) {
     this.root = document.getElementById("ui")!;
-    const mobile=mobileDevice();document.documentElement.classList.toggle("mobile-device",mobile);
+    const mobile=this.mobile=mobileDevice();document.documentElement.classList.toggle("mobile-device",mobile);
     const logo=document.querySelector<HTMLImageElement>("#startup img")?.src||"";
     this.root.innerHTML = `
  <div id="vignette"></div><div id="toast" role="status"></div>
@@ -64,15 +69,16 @@ export class UI {
      <button data-action="drive" class="mode-card open-card"><svg class="mode-icon" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="29"/><path d="M51 24 45 45 24 53 31 31Z M40 5v9 M40 66v9 M5 40h9 M66 40h9"/></svg><span class="mode-name">Open<br>World <b>↗</b></span></button>
      <button data-action="race" class="mode-card race-card"><svg class="mode-icon" viewBox="0 0 80 80" aria-hidden="true"><path d="M20 70V13h44v32H20"/><path class="flag-fill" d="M21 14h10v10H21Zm20 0h10v10H41Zm10 10h12v10H51Zm-20 0h10v10H31ZM21 34h10v10H21Zm20 0h10v10H41Z"/></svg><span class="mode-name">Race <b>→</b></span></button>
    </div>
-   <nav class="main-nav">${button("garage", "GARAGE <span>↗</span>")}${button("settings", "SETTINGS")}${button("statistics", "STATISTICS")}${button("leaderboard", "LAP TIMES")}${button("continue", "CONTINUE", "continue")}</nav>
+   <nav class="main-nav">${button("garage", "GARAGE <span>↗</span>")}${button("settings", "SETTINGS")}${button("activities", "ROUTES & PRACTICE")}${button("statistics", "STATISTICS")}${button("leaderboard", "LAP TIMES")}${button("continue", "CONTINUE", "continue")}</nav>
    
  </section>
+ <section data-panel="activities" class="overlay" hidden><div class="panel activities-panel"><div class="panel-head"><h2>Routes & practice</h2>${button("back","← BACK","text-button")}</div><h3>RACE ROUTES</h3><div id="race-routes" class="activity-grid"></div><h3>PRACTICE SECTIONS</h3><p class="muted">No timer, traffic or police. Restart the section at any time.</p><div id="practice-sections" class="activity-grid"></div></div></section>
  <div id="edition"><div class="wallet"><span class="coin-symbol">◉</span><b class="coin-balance">0</b><span>COINS</span></div></div>
  <section data-panel="drive" class="drive-ui"><header class="topbar"><div><span class="tiny" id="mode-label">OPEN WORLD</span><strong id="location">AZURE COAST</strong></div><nav><button data-action="vehicle-toggle" id="vehicle-toggle"><span class="desktop-action">SHIFT · EXIT</span><span class="mobile-action">EXIT</span></button><div class="wallet hud-wallet"><span class="coin-symbol">◉</span><b class="coin-balance">0</b></div><button data-action="autopilot" id="autopilot-toggle" aria-pressed="false"><span class="desktop-action"><span class="key">F</span> AUTOPILOT OFF</span><span class="mobile-action">AUTOPILOT</span></button>${button("photo", '<span class="key">P</span> PHOTO')}${button("map", '<span class="key">M</span> MAP')}${button("pause", '<span class="key">ESC</span> PAUSE')}</nav></header><aside id="law-hud" hidden><div id="speed-sign"><strong id="posted-limit">—</strong><small>km/h</small></div><div id="law-copy"><b id="law-title">UNRESTRICTED</b><span id="law-detail"></span><progress id="law-progress" max="1" value="0" hidden></progress></div></aside><div class="minimap"><canvas id="minimap" width="440" height="440"></canvas><div class="map-n">N</div></div><div class="instruments">${speedometerMarkup()}<div class="instrument-status"><div id="wheelie-status" hidden></div><div id="boost-status" hidden></div><div id="drift"></div><div id="drift-meter" hidden><div class="drift-meter-label"><span id="drift-state">DRIFT</span><b id="drift-charge">0%</b></div><div class="drift-meter-track" role="progressbar" aria-label="Drift charge" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="drift-fill"></i></div></div><div id="slipstream-status" hidden>SLIPSTREAM</div></div></div><div id="race-hud"><div><span>POSITION</span><strong id="race-position">8<small> / 8</small></strong></div><div><span>TIME</span><strong id="race-time">00:00.00</strong></div><div><span>LAP</span><strong id="race-lap">1<small> / 1</small></strong></div><div><span>CHECKPOINT</span><strong id="race-checkpoint">01<small> / 19</small></strong></div></div><div id="countdown"></div><div class="touch-controls"><button data-hold="KeyA">◀</button><button data-hold="KeyD">▶</button><button data-hold="Space">HB</button><button data-hold="KeyS">BRAKE</button><button data-hold="KeyW">GO</button><button data-hold="ControlLeft" id="touch-wheelie" hidden>WHEELIE</button></div></section>
  <section data-panel="leaderboard" class="overlay"><div class="panel leaderboard-panel"><div class="panel-head"><h2>Lap times</h2>${button("back","← BACK","text-button")}</div><div class="leaderboard-toolbar"><div><span class="tiny">HORIZON CIRCUIT</span><strong id="lap-best">—</strong></div><label>Driving<select id="lap-filter"><option value="all">All laps</option><option value="manual">Manual</option><option value="assisted">Assisted</option></select></label></div><div id="leaderboard-content"></div></div></section>
  <section data-panel="statistics" class="overlay"><div class="panel statistics-panel"><div class="panel-head"><h2>Statistics</h2>${button("back","← BACK","text-button")}</div><div id="statistics-content"></div></div></section>
- <section data-panel="pause" class="overlay"><div class="panel narrow"><h2>Paused</h2><div class="stack">${button("resume", "RESUME", "primary")}${button("race", `HORIZON CIRCUIT <span>${(this.roads.main.length/1000).toFixed(1)} km / 8 cars</span>`)}${button("garage", "GARAGE")}${button("settings", "SETTINGS")}${button("controls", "CONTROLS")}${button("menu", "MAIN MENU")}</div></div></section>
- <section data-panel="settings" class="overlay"><div class="panel settings"><div class="panel-head"><div><h2>Settings</h2></div>${button("back", "← BACK", "text-button")}</div><div class="settings-grid"><div><h3>DISPLAY & WORLD</h3><label>Graphics quality<select data-setting="quality"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="ultra">Ultra</option></select></label><label class="check">Automatic resolution scaling<input data-setting="adaptiveResolution" type="checkbox"></label><label>Render distance <span id="render-distance-out"></span><input data-setting="renderDistance" type="range" min="500" max="3000" step="100"></label><label>Simulation distance <span id="simulation-distance-out"></span><input data-setting="simulationDistance" type="range" min="250" max="1000" step="50"></label><p class="muted">Simulation distance controls nearby traffic and scenery collisions. Active races and pursuits keep running.</p><label>Weather<select data-setting="weather"><option value="clear">Clear</option><option value="cloudy">Cloudy</option><option value="rain">Rain</option><option value="fog">Fog</option></select></label><label>Time of day <span id="hour-out"></span><input data-setting="hour" type="range" min="0" max="23.9" step=".1"></label><label class="check">Day / night cycle<input data-setting="cycle" type="checkbox"></label><label>Audio volume<input data-setting="volume" type="range" min="0" max="1" step=".01"></label></div><div><h3>DRIVING</h3><label>Race length<select data-setting="raceLaps"><option value="1">1 lap · sprint</option><option value="3">3 laps · endurance</option></select></label><label>Transmission<select data-setting="automatic"><option value="true">Automatic</option><option value="false">Manual · Q / E</option></select></label><label>Speed units<select data-setting="units"><option value="kmh">Kilometres per hour</option><option value="mph">Miles per hour</option></select></label><label class="check">Traction control<input data-setting="traction" type="checkbox"></label><label class="check">Stability assist<input data-setting="stability" type="checkbox"></label><label>Autopilot mode<select data-setting="autopilotMode"><option value="full">Full driving</option><option value="steering">Steering only · you control speed</option><option value="speed">Speed only · you steer</option></select></label><p id="autopilot-mode-help" class="muted"></p><label class="check">Choose autopilot route<input data-setting="autopilotRoutes" type="checkbox"></label><label>Autopilot speed <span id="autopilot-speed-out"></span><input data-setting="autopilotSpeed" type="range" min="30" max="180" step="5"></label><p class="muted">F toggles autopilot. Manual input overrides the assist.</p>${button("controls", "VIEW CONTROLS →", "text-button")}</div></div></div></section>
+ <section data-panel="pause" class="overlay"><div class="panel narrow"><h2>Paused</h2><div class="stack">${button("resume", "RESUME", "primary")}${button("restart", "RESTART SESSION")}${button("recover", "RETURN TO ROAD")}${button("activities", "ROUTES & PRACTICE")}${button("race", `HORIZON CIRCUIT <span>${(this.roads.main.length/1000).toFixed(1)} km / 8 cars</span>`)}${button("garage", "GARAGE")}${button("settings", "SETTINGS")}${button("controls", "CONTROLS")}${button("menu", "MAIN MENU")}</div></div></section>
+ <section data-panel="settings" class="overlay"><div class="panel settings"><div class="panel-head"><div><h2>Settings</h2></div>${button("back", "← BACK", "text-button")}</div><div class="settings-grid"><div><h3>DISPLAY & WORLD</h3><label>Graphics quality<select data-setting="quality"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="ultra">Ultra</option></select></label><label class="check">Automatic resolution scaling<input data-setting="adaptiveResolution" type="checkbox"></label><label>Render distance <span id="render-distance-out"></span><input data-setting="renderDistance" type="range" min="500" max="3000" step="100"></label><label>Simulation distance <span id="simulation-distance-out"></span><input data-setting="simulationDistance" type="range" min="250" max="1000" step="50"></label><p class="muted">Simulation distance controls nearby traffic and scenery collisions. Active races and pursuits keep running.</p><label>Weather<select data-setting="weather"><option value="clear">Clear</option><option value="cloudy">Cloudy</option><option value="rain">Rain</option><option value="fog">Fog</option></select></label><label>Time of day <span id="hour-out"></span><input data-setting="hour" type="range" min="0" max="23.9" step=".1"></label><label class="check">Day / night cycle<input data-setting="cycle" type="checkbox"></label><label>Camera vibration<input data-setting="cameraMotion" type="range" min="0" max="1" step=".1"></label><label>Audio volume<input data-setting="volume" type="range" min="0" max="1" step=".01"></label></div><div><h3>DRIVING</h3><label>Race length<select data-setting="raceLaps"><option value="1">1 lap · sprint</option><option value="3">3 laps · endurance</option></select></label><label>Transmission<select data-setting="automatic"><option value="true">Automatic</option><option value="false">Manual · Q / E</option></select></label><label>Speed units<select data-setting="units"><option value="kmh">Kilometres per hour</option><option value="mph">Miles per hour</option></select></label><label class="check">Traction control<input data-setting="traction" type="checkbox"></label><label class="check">Stability assist<input data-setting="stability" type="checkbox"></label><label>Autopilot mode<select data-setting="autopilotMode"><option value="full">Full driving</option><option value="steering">Steering only · you control speed</option><option value="speed">Speed only · you steer</option></select></label><p id="autopilot-mode-help" class="muted"></p><label class="check">Choose autopilot route<input data-setting="autopilotRoutes" type="checkbox"></label><label>Autopilot speed <span id="autopilot-speed-out"></span><input data-setting="autopilotSpeed" type="range" min="30" max="180" step="5"></label><p class="muted">F toggles autopilot. Manual input overrides the assist.</p>${button("controls", "VIEW CONTROLS →", "text-button")}</div></div></div></section>
  <section data-panel="controls" class="overlay"><div class="panel controls"><div class="panel-head"><div><h2>Controls</h2></div>${button("back", "← BACK", "text-button")}</div><div class="control-grid"><div><h3>KEYBOARD</h3><dl><dt>W / ↑</dt><dd>Accelerate</dd><dt>S / ↓</dt><dd>Brake · hold at rest to reverse</dd><dt>A D / ← →</dt><dd>Steer</dd><dt>Space</dt><dd>Handbrake</dd><dt>Hold Ctrl</dt><dd>Bike wheelie while moving · release or brake to land</dd><dt>Q / E</dt><dd>Shift down / up</dd><dt>C</dt><dd>Cycle 7 cameras</dd><dt>R</dt><dd>Reset to road</dd><dt>H / L</dt><dd>Horn / headlights</dd><dt>G</dt><dd>Start Horizon Circuit</dd><dt>M / P</dt><dd>World map / photo mode</dd><dt>Esc</dt><dd>Pause / back</dd><dt>F</dt><dd>Autopilot on / off</dd><dt>1 / 2 / 3</dt><dd>Choose an upcoming route</dd><dt>Shift</dt><dd>Exit / enter vehicle · WASD to walk · drag to look</dd><dt>Alt + Enter / F3</dt><dd>Fullscreen / performance</dd></dl></div><div><h3>CONTROLLER</h3><dl><dt>Left stick</dt><dd>Steer</dd><dt>RT / LT</dt><dd>Accelerate / brake</dd><dt>A</dt><dd>Handbrake</dd><dt>LB / RB</dt><dd>Shift down / up</dd><dt>Y / X</dt><dd>Camera / reset</dd><dt>Start / View</dt><dd>Pause / map</dd></dl><h3>PHOTO & FREE CAMERA</h3><p class="muted">Drag to orbit or look. Scroll to change orbit distance. Free camera: I/K forward/back, J/L left/right, O/U rise/descend. WASD, arrows and controller still drive the vehicle. In photo mode, Tab hides the controls.</p></div></div></div></section>
  <section data-panel="garage" class="garage-panel"><div class="garage-header"><div class="eyebrow">GARAGE</div><div class="wallet"><span class="coin-symbol">◉</span><b class="coin-balance">0</b></div></div><h2><span id="garage-car-name">VANTA R1</span></h2><div id="garage-spec" class="garage-spec"></div><h3>VEHICLES</h3><div id="car-shop" class="car-shop"></div><h3>BODY FINISH</h3><div class="swatches">${[
    ["#b81120", "Rosso"],
@@ -100,6 +106,7 @@ export class UI {
  <div id="debug"></div>`;
     this.root.querySelector('[data-panel="garage"] h2')!.insertAdjacentHTML("afterend",button("workshop","UPGRADES →","workshop-entry"));
     this.root.querySelector("#result-best")!.insertAdjacentHTML("afterend",'<p id="result-reward" class="reward-note"></p>');
+    this.root.querySelector("#result-best")!.insertAdjacentHTML("afterend",'<ol id="result-standings" class="result-standings" hidden aria-label="Finishing order"></ol>');
     this.root.insertAdjacentHTML("beforeend",`<section data-panel="workshop" class="overlay" hidden><div class="panel workshop-panel"><div class="panel-head"><div><div class="eyebrow">UPGRADES</div><h2 id="workshop-car"></h2><div class="wallet"><span class="coin-symbol">◉</span><b class="coin-balance">0</b></div></div>${button("back","← BACK","text-button")}</div><div id="tune-summary" class="tune-summary"></div><div id="upgrade-shop" class="upgrade-shop"></div></div></section>`);
     this.root.querySelector('[data-panel="drive"]')!.insertAdjacentHTML('beforeend','<aside id="route-choice" hidden aria-label="Autopilot route choice"><div class="route-heading"><strong>CHOOSE ROUTE</strong><span id="route-distance"></span></div><div id="route-options"></div><p id="route-hint" role="status"></p></aside>');
     this.mini = document.getElementById("minimap") as HTMLCanvasElement;
@@ -166,6 +173,7 @@ export class UI {
   }
   setState(state: State) {
     this.state = state;
+    if(state==="activities")this.showActivities();
     if(state==="statistics")this.showStatistics();
     if(state==="leaderboard")this.showLeaderboard();
     this.root.dataset.state = state;
@@ -183,12 +191,13 @@ export class UI {
     const key=`${this.save.unlimitedCoins}:${this.save.coins}:${this.save.selectedCar}:${[...this.save.ownedCars].join()}:${JSON.stringify(this.save.loadout)}`;
     if(key===this.economyKey)return;this.economyKey=key;
     this.root.querySelectorAll(".coin-balance").forEach(el=>el.textContent=this.save.unlimitedCoins?"∞":this.save.coins.toLocaleString());
-    const car=this.save.car,tune=tuneFor(this.save.loadout);
+    const car=this.save.car,tune=tuneFor(this.save.loadout),estimate=performanceEstimate(car,tune);
     document.getElementById("garage-car-name")!.textContent=car.name;
-    document.getElementById("garage-spec")!.innerHTML=`<div><strong>${Math.round(620*car.power*tune.enginePower*chassisFor(car).forceScale)}</strong><span>Nm TORQUE</span></div><div><strong>${Math.round((car.topSpeed+tune.engineSpeed+tune.gearingSpeed)*3.6)}</strong><span>km/h TOP SPEED</span></div><div><strong>${Math.round(car.handling*100)}</strong><span>GRIP</span></div>`;
+    document.getElementById("garage-spec")!.innerHTML=`<div><strong>${Math.round(620*car.power*tune.enginePower*chassisFor(car).forceScale)}</strong><span>Nm TORQUE</span></div><div><strong>${Math.round((car.topSpeed+tune.engineSpeed+tune.gearingSpeed)*3.6)}</strong><span>km/h TOP SPEED</span></div><div><strong>${Math.round(car.handling*100)}</strong><span>GRIP</span></div><div><strong>${estimate.acceleration.toFixed(1)} s</strong><span>0–100 KM/H · EST.</span></div><div><strong>${Math.round(estimate.braking)} m</strong><span>100–0 KM/H · EST.</span></div><div><strong>${estimate.mass} kg</strong><span>${estimate.drive}</span></div><p class="vehicle-character">${estimate.label}</p>`;
     document.getElementById("car-shop")!.innerHTML=CARS.map((c,i)=>{
+      const preview=performanceEstimate(c,tuneFor(this.save.loadouts[c.id]||STOCK));
       const selected=c.id===this.save.selectedCar,owned=this.save.ownedCars.has(c.id),canBuy=this.save.unlimitedCoins||this.save.coins>=c.price;
-      return `<article class="shop-car ${selected?'equipped':''}" style="--car-color:${c.color}"><div class="shop-car-top"><span class="car-number">0${i+1}</span><div><strong>${c.name}</strong></div></div><div class="car-stat-row"><span>POWER ${Math.round(c.power*100)}</span><span>GRIP ${Math.round(c.handling*100)}</span><span>${Math.round(c.topSpeed*3.6)} KM/H LIMIT</span></div><button data-action="car:${c.id}" ${selected||(!owned&&!canBuy)?'disabled':''}>${selected?'EQUIPPED':owned?'SELECT →':`UNLOCK · ${c.price} COINS`}</button>${!owned&&!canBuy?`<small>${c.price-this.save.coins} more coins needed</small>`:''}</article>`;
+      return `<article class="shop-car ${selected?'equipped':''}" style="--car-color:${c.color}"><div class="shop-car-top"><span class="car-number">0${i+1}</span><div><strong>${c.name}</strong></div></div><div class="car-stat-row"><span>POWER ${Math.round(c.power*100)}</span><span>GRIP ${Math.round(c.handling*100)}</span><span>${Math.round(c.topSpeed*3.6)} KM/H LIMIT</span><span>${preview.acceleration.toFixed(1)}s 0–100 · EST.</span><span>${Math.round(preview.braking)}m STOP · EST.</span></div><button data-action="car:${c.id}" ${selected||(!owned&&!canBuy)?'disabled':''}>${selected?'EQUIPPED':owned?'SELECT →':`UNLOCK · ${c.price} COINS`}</button>${!owned&&!canBuy?`<small>${c.price-this.save.coins} more coins needed</small>`:''}</article>`;
     }).join("");
     document.getElementById("touch-wheelie")!.hidden=!isBike(car);
     this.renderWorkshop();
@@ -257,6 +266,10 @@ export class UI {
     document.getElementById('lap-best')!.textContent=records.length?timeText(records[0].time):'—';
     document.getElementById('leaderboard-content')!.innerHTML=records.length?`<table class="lap-table"><thead><tr><th scope="col">#</th><th scope="col">Lap time</th><th scope="col">Vehicle / driving</th><th scope="col" class="lap-date">Date</th></tr></thead><tbody>${records.map((r,i)=>`<tr><th scope="row">${String(i+1).padStart(2,'0')}</th><td class="lap-time">${timeText(r.time)}</td><td>${r.imported?'Previous best':CARS.find(c=>c.id===r.carId)!.name}<small>${r.imported?'Imported':`${r.assisted?'Assisted':'Manual'}${r.multiplayer?' · Multiplayer':''} · Lap ${r.lap}`}</small></td><td class="lap-date">${r.date?new Date(r.date).toLocaleDateString():'—'}</td></tr>`).join('')}</tbody></table>`:'<p class="leaderboard-empty">Complete a circuit lap to set a time.</p>';
   }
+  showActivities(){
+    document.getElementById('race-routes')!.innerHTML=RACE_ROUTES.map(r=>{const road=routeRoad(this.roads,r.id),best=r.id==='horizon'?this.save.best:this.save.routeBests[r.id];return `<article><span class="tiny">${r.closed?'CIRCUIT':'SPRINT'} · ${(road.length/1000).toFixed(1)} KM</span><h4>${r.name}</h4><p>${r.description}</p>${best?`<small>Best ${timeText(best)}</small>`:''}<button data-action="race-route:${r.id}">RACE →</button></article>`;}).join('');
+    document.getElementById('practice-sections')!.innerHTML=PRACTICE_SECTIONS.map(p=>`<article><h4>${p.name}</h4><p>${p.description}</p><button data-action="practice:${p.id}">PRACTICE →</button></article>`).join('');
+  }
   showStatistics(){
     const s=this.save,miles=s.settings.units==='mph',num=(n:number)=>n.toLocaleString(undefined,{maximumFractionDigits:0});
     const cards=(items:[string,string][])=>items.map(([label,value])=>`<div><dt>${label}</dt><dd>${value}</dd></div>`).join('');
@@ -296,7 +309,7 @@ export class UI {
       document.getElementById('route-options')!.innerHTML=choice.options.map((o,i)=>`<button data-action="route:${i}" ${choice.locked?'disabled':''} aria-pressed="${i===choice.selected}"><span class="key">${i+1}</span><b>${o.label==='Left'?'↰':o.label==='Right'?'↱':'↑'} ${o.label}</b><small>${o.road.name}</small></button>`).join('');
     }
     const distance=`${Math.max(0,Math.ceil(choice.distance/10)*10)} m`,out=document.getElementById('route-distance')!;if(out.textContent!==distance)out.textContent=distance;
-    const hint=this.save.settings.autopilotMode==='steering'?'1–3 to choose · brake for turns':'1–3 to choose';
+    const hint=this.mobile?(this.save.settings.autopilotMode==='steering'?'Tap a route · brake for turns':'Tap a route'):this.save.settings.autopilotMode==='steering'?'1–3 to choose · brake for turns':'1–3 to choose';
     const label=document.getElementById('route-hint')!;if(label.textContent!==hint)label.textContent=hint;
   }
   loading(text: string) {
@@ -307,7 +320,11 @@ export class UI {
     p.innerHTML = `<div class="eyebrow">UNABLE TO START</div><h2>Unable to load game</h2><p class="muted"></p>${button("reload", "TRY AGAIN", "primary")}`;
     p.querySelector("p")!.textContent = message;
   }
-  toast(text: string) {
+  private toastPriority=0;private toastUntil=0;private pendingReward=0;
+  reward(amount:number){this.pendingReward+=amount;}
+  toast(text: string,priority=1) {
+    const now=performance.now();if(priority<this.toastPriority&&now<this.toastUntil)return;
+    this.toastPriority=priority;this.toastUntil=now+2300;
     document.getElementById("toast")!.textContent = text;
     document.getElementById("toast")!.classList.add("show");
     clearTimeout(this.toastTimer);
@@ -318,8 +335,8 @@ export class UI {
   }
   lawStatus(racing:boolean) {
     const p=this.police;if(!p)return;const r=p.rules;
-    const title=r.impound>0?"TRAFFIC STOP":p.active?"POLICE PURSUIT":r.warning>0?"SLOW DOWN":racing?"CLOSED CIRCUIT":p.limit?"SPEED LIMIT":"UNRESTRICTED";
-    const detail=r.impound>0?`−${p.lastFine} coins · ${Math.ceil(r.impound)}s`:p.active?r.capture>0?`Officer intercept · ${Math.ceil(3-r.capture)}s`:r.escape>0?`Escaping · ${Math.ceil(8-r.escape)}s`:`Police · ${Math.round(p.nearest)} m`:"";
+    const title=r.impound>0?"TRAFFIC STOP":p.active?(!p.seen?"SEARCHING":`PURSUIT · ${r.stage}/3`):r.warning>0?"SLOW DOWN":racing?"CLOSED CIRCUIT":p.limit?"SPEED LIMIT":"UNRESTRICTED";
+    const detail=r.impound>0?`−${p.lastFine} coins · ${Math.ceil(r.impound)}s`:p.active?r.capture>0?`Officer intercept · ${Math.ceil(3-r.capture)}s`:r.escape>0?`Escaping · ${Math.ceil(8-r.escape)}s`:`${p.seen?"In sight":"Sight lost"} · ${Math.round(p.nearest)} m`:"";
     document.getElementById("law-hud")!.hidden=!(r.impound>0||p.active||r.warning>0||(!racing&&p.limit));
     document.getElementById("law-detail")!.hidden=!detail;
     document.getElementById("posted-limit")!.textContent=p.limit?String(p.limit):"—";
@@ -335,11 +352,12 @@ export class UI {
     debug: boolean,
   ) {
     const s = this.save.settings;
+    if(this.pendingReward&&performance.now()>this.toastUntil){const amount=this.pendingReward;this.pendingReward=0;this.toast(`+${amount} coins`,0);}
     this.economy();
     const wheelieStatus=document.getElementById("wheelie-status")!;
     wheelieStatus.hidden=!car.bike||car.wheelie<=.12;
     wheelieStatus.textContent="WHEELIE";
-    document.getElementById("mode-label")!.textContent=race.active?"RACE":"OPEN WORLD";
+    document.getElementById("mode-label")!.textContent=race.active?(race.route.closed?"RACE":"SPRINT"):this.practiceName?`PRACTICE · ${this.practiceName}`:"OPEN WORLD";
     document.getElementById("race-lap")!.innerHTML=`${race.lap}<small> / ${race.laps}</small>`;
     updateSpeedometer(car.speed,car.rpm,car.gear,car.reverse,s.units);
     document.getElementById("location")!.textContent = this.roads.region(
@@ -358,7 +376,7 @@ export class UI {
       !drift.active && drift.rewardFlash<=0 && Math.abs(car.slip) > 0.18 && car.speed > 10
         ? `DRIFT ${Math.round(car.driftScore)}`
         : "";
-    this.lawStatus(race.active||race.finished);
+    this.lawStatus(race.active||race.finished||!!this.practiceName);
     document.getElementById("race-hud")!.style.display = race.active
       ? "flex"
       : "none";
@@ -380,6 +398,8 @@ export class UI {
     if (this.state === "map") this.drawMap(this.map, car, false);
   }
   showResults(race: RaceManager) {
+    const table=document.getElementById('result-standings')!;table.hidden=!race.networkRace;
+    if(race.networkRace)table.innerHTML=race.standings.map((p,i)=>`<li><b>${i+1}</b><span>Driver ${p.slot+1}${p.slot===race.localSlot?' · YOU':''}</span><strong>${p.finished?timeText(p.time):p.connected?'RACING':'DNF'}</strong></li>`).join('');
     document.getElementById("result-reward")!.textContent=race.networkRace?'':`+${race.rewardEarned} COINS`;
     document.getElementById("result-place")!.innerHTML =
       `${String(race.position).padStart(2, "0")} <small>/ ${race.networkRace?String(race.networkCount).padStart(2,'0'):'08'}</small>`;
@@ -387,7 +407,7 @@ export class UI {
       race.resultTime,
     );
     document.getElementById("result-best")!.textContent =
-      race.networkRace ? race.networkResult : `PERSONAL BEST · ${race.laps} LAP${race.laps>1?"S":""}  ${timeText(race.best)}`;
+      race.networkRace ? race.networkResult : `PERSONAL BEST · ${race.route.closed?`${race.laps} LAP${race.laps>1?"S":""}`:RACE_ROUTES.find(r=>r.id===race.routeId)?.name}  ${timeText(race.best)}`;
   }
   drawMap(canvas: HTMLCanvasElement, car: VehiclePhysics, mini: boolean) {
     const w = mini ? 440 : innerWidth,

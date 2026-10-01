@@ -1,5 +1,5 @@
 import * as T from "three";
-import { RoadNetwork } from "./RoadNetwork";
+import { RoadNetwork,roadHeight } from "./RoadNetwork";
 
 type Point = { x: number; y: number; z: number };
 type RoadFace = {
@@ -24,7 +24,7 @@ export class TerrainSampler {
         const a = road.samples[i], b = road.samples[i + 1];
         const edge = (s: typeof a, side: number): Point => ({
           x: s.p.x + s.r.x * width * side,
-          y: s.p.y,
+          y: roadHeight(s,width*side),
           z: s.p.z + s.r.z * width * side,
         });
         const al = edge(a, -1), ar = edge(a, 1), bl = edge(b, -1), br = edge(b, 1);

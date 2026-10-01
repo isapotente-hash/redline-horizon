@@ -1372,3 +1372,23 @@ label output {
 @media (max-height:520px) {
   .mobile-device .drive-ui:has(#touch-wheelie:not([hidden])) .instrument-status {bottom:calc(-1 * var(--touch-size) - 8px)}
 }
+
+/* Route / practice and room configuration share the existing panel palette. */
+.activities-panel{width:min(980px,94vw)}
+.activity-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:18px 0 28px}
+.activity-grid article{display:flex;flex-direction:column;background:#101b24;border:1px solid #ffffff20;padding:18px;min-width:0}
+.activity-grid h4{font-size:19px;margin:10px 0 8px}.activity-grid p{font-size:12px;line-height:1.6;color:#b8c5cc;flex:1;margin:0 0 14px}.activity-grid small{font-size:11px;color:#8cece1;margin-bottom:12px}.activity-grid button{min-height:48px;text-align:left}
+.activity-grid button,.mp-panel button:not(.primary):not(.text-button){background:#203841;color:#e8faf6;border:1px solid #6ebcaf66;padding:12px 16px;font-size:11px;font-weight:700;letter-spacing:1px;min-height:48px}
+.activity-grid button:hover,.mp-panel button:not(.primary):not(.text-button):hover{background:#31564f;border-color:#86e9d4}
+.lobby-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:18px 0}
+.lobby-settings label{font-size:11px;color:#c1ced5;margin:0}.lobby-settings select{display:block;width:100%;min-height:48px;margin-top:8px;padding:10px;background:#14232d;color:#eef8f6;border:1px solid #ffffff25;border-radius:0}
+#mp-ready[aria-pressed=true]{color:#8df4db;border-color:#65fff1}#mp-roster li{font-size:11px;line-height:1.6;padding:10px 12px;overflow-wrap:anywhere}
+.garage-spec{flex-wrap:wrap;row-gap:18px}.vehicle-character{width:100%;margin:0;font-size:12px;color:#bdc9cf}.car-stat-row{flex-wrap:wrap;row-gap:5px}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #80e8df;outline-offset:3px}
+.mobile-device .activities-panel,.mobile-device .mp-panel{max-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px);overflow-y:auto;overscroll-behavior:contain}
+.mobile-device .activities-panel button,.mobile-device .mp-panel button{min-height:48px}
+.mobile-device .activity-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.mobile-device .activity-grid article{padding:12px}.mobile-device .activity-grid h4{font-size:16px}
+.mobile-device .menu-panel{max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain}
+@media(max-width:480px){.mobile-device .activity-grid{grid-template-columns:1fr}.mobile-device .lobby-settings{grid-template-columns:1fr 1fr;gap:10px}.mobile-device .activities-panel{padding:20px}.mobile-device .garage-spec{gap:16px}.mobile-device .garage-spec strong{font-size:24px}}
+@media(prefers-reduced-motion:reduce){button,.mode-card,#toast{transition:none!important;animation:none!important}}
+.result-standings{list-style:none;padding:0;margin:20px 0}.result-standings li{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid #ffffff18;font-size:12px}.result-standings li>span{flex:1}.result-standings li>strong{font-variant-numeric:tabular-nums;color:#9ee8df}.mobile-device #mode-label{display:block;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

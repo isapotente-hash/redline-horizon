@@ -1,3 +1,4 @@
+import {LANDMARKS} from "./RoadLandmarks";
 import * as T from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {RoadNetwork} from './RoadNetwork';
@@ -10,17 +11,19 @@ export class RegionalScenery {
   box=new T.BoxGeometry(1,1,1);
   roof=new T.ConeGeometry(.72,1,4).rotateY(Math.PI/4);
   cactus:T.BufferGeometry;
-  materials={foundation:new T.MeshStandardMaterial({color:'#777b77',roughness:1}),plaster:new T.MeshStandardMaterial({color:'#dbd3ba',roughness:.88}),roof:new T.MeshStandardMaterial({color:'#784d44',roughness:.85}),glass:new T.MeshStandardMaterial({color:'#486d7d',metalness:.3,roughness:.3}),metal:new T.MeshStandardMaterial({color:'#788b94',metalness:.4,roughness:.6}),brick:new T.MeshStandardMaterial({color:'#a67852',roughness:.95}),field:new T.MeshStandardMaterial({color:'#a79950',roughness:1}),cactus:new T.MeshStandardMaterial({color:'#697849',roughness:1})};
+  bush=new T.IcosahedronGeometry(1,1);
+  materials={hedge:new T.MeshStandardMaterial({color:"#726a3d",roughness:1}),wood:new T.MeshStandardMaterial({color:"#756044",roughness:1}),foundation:new T.MeshStandardMaterial({color:'#777b77',roughness:1}),plaster:new T.MeshStandardMaterial({color:'#dbd3ba',roughness:.88}),roof:new T.MeshStandardMaterial({color:'#784d44',roughness:.85}),glass:new T.MeshStandardMaterial({color:'#486d7d',metalness:.3,roughness:.3}),metal:new T.MeshStandardMaterial({color:'#788b94',metalness:.4,roughness:.6}),brick:new T.MeshStandardMaterial({color:'#a67852',roughness:.95}),field:new T.MeshStandardMaterial({color:'#a79950',roughness:1}),cactus:new T.MeshStandardMaterial({color:'#697849',roughness:1})};
   constructor(public roads:RoadNetwork,public terrain:TerrainSampler){
     const parts=[new T.CylinderGeometry(.23,.32,4,6).translate(0,2,0),new T.CylinderGeometry(.16,.2,1.8,6).translate(-.8,2.3,0),new T.CylinderGeometry(.14,.18,1.5,6).translate(.8,2.9,0),new T.BoxGeometry(1.9,.27,.28).translate(0,1.55,0)];
     this.cactus=mergeGeometries(parts,false)!;parts.forEach(g=>g.dispose());
   }
-  build(x:number,z:number,obstacles:SceneryObstacle[]){
+  build(x:number,z:number,obstacles:SceneryObstacle[]){const work=this.buildSteps(x,z,obstacles);let next=work.next();while(!next.done)next=work.next();return next.value;}
+  *buildSteps(x:number,z:number,obstacles:SceneryObstacle[]):Generator<void,T.Group,void>{
     const root=new T.Group(),random=rng((x*16807)^(z*48271)^91),matrix=new T.Object3D();
     const batches=new Map<string,{g:T.BufferGeometry;m:T.Material;matrices:T.Matrix4[]}>();
-    const place=(key:keyof RegionalScenery['materials'],px:number,py:number,pz:number,w:number,h:number,d:number,yaw=0,shape:'box'|'roof'|'cactus'='box',solid=false)=>{
+    const place=(key:keyof RegionalScenery['materials'],px:number,py:number,pz:number,w:number,h:number,d:number,yaw=0,shape:'box'|'roof'|'cactus'|'bush'='box',solid=false)=>{
       matrix.position.set(px,py,pz);matrix.rotation.set(0,yaw,0);matrix.scale.set(w,h,d);matrix.updateMatrix();
-      const id=key+shape;let batch=batches.get(id);if(!batch){batch={g:shape==='roof'?this.roof:shape==='cactus'?this.cactus:this.box,m:this.materials[key],matrices:[]};batches.set(id,batch);}batch.matrices.push(matrix.matrix.clone());
+      const id=key+shape;let batch=batches.get(id);if(!batch){batch={g:shape==='roof'?this.roof:shape==='cactus'?this.cactus:shape==='bush'?this.bush:this.box,m:this.materials[key],matrices:[]};batches.set(id,batch);}batch.matrices.push(matrix.matrix.clone());
       if(solid)obstacles.push({kind:'box',matrix:matrix.matrix.clone()});
     };
     // Sample the entire footprint, including its edges. A level plinth extends
@@ -37,6 +40,7 @@ export class RegionalScenery {
       return floor;
     };
     for(let i=0;i<32;i++){
+      if(i%8===0)yield;
       const px=(x+random())*256,pz=(z+random())*256,region=this.roads.region(px,pz),near=this.roads.nearest(px,pz),h=this.terrain.groundHeight(px,pz);
       if(h<3||near.distance>150)continue;
       const yaw=Math.atan2(near.sample.t.x,near.sample.t.z);
@@ -62,6 +66,43 @@ export class RegionalScenery {
         if(!this.terrain.vegetationClear(px,pz,14))continue;
         const floor=foundation(px,pz,10,12,yaw);if(floor===null)continue;
         place('plaster',px,floor+2.4,pz,10,4.8,12,yaw,'box',true);place('roof',px,floor+5.6,pz,11,2,13,yaw,'roof');
+      }
+    }
+    // Irregular roadside hedgerows and bare patches: batches share geometry/materials.
+    for(let i=0;i<90;i++){
+      if(i%10===0)yield;
+      const px=(x+random())*256,pz=(z+random())*256,near=this.roads.nearest(px,pz),region=this.roads.region(px,pz);
+      if(near.distance>80||['COPPER DUNES','DRY MESA','NOVA CITY','ZENITH INDUSTRIAL','SUMMIT PEAKS'].includes(region)||!this.terrain.vegetationClear(px,pz,1.6))continue;
+      const patch=Math.sin(px*.031+Math.sin(pz*.021)*2);if(patch<.12)continue;
+      const h=this.terrain.groundHeight(px,pz);if(h<3||h>320)continue;
+      for(let j=0;j<3;j++){
+        const tx=px+(random()-.5)*4,tz=pz+(random()-.5)*4;if(!this.terrain.vegetationClear(tx,tz,1.6))continue;
+        const y=this.terrain.groundHeight(tx,tz),w=.6+random()*1.2,tall=.4+random()*.7;
+        place('hedge',tx,y+tall*.4,tz,w,tall,w*.7,random()*6,'bush');
+      }
+    }
+    for(const landmark of LANDMARKS){
+      yield;
+      const road=this.roads.roads.find(r=>r.name===landmark.road);if(!road)continue;
+      const a=this.roads.at(road,landmark.distance),side=landmark.side,center=a.p.clone().addScaledVector(a.r,side*(road.width/2+42));
+      if(Math.floor(center.x/256)!==x||Math.floor(center.z/256)!==z)continue;
+      const yaw=Math.atan2(a.t.x,a.t.z);
+      if(landmark.kind==='lookout'){
+        const h=this.terrain.groundHeight(center.x,center.z);place('foundation',center.x,h+1.1,center.z,3.5,2.2,3.5,yaw,'box',true);
+        place('wood',center.x,h+2.35,center.z,4,.22,4,yaw);place('metal',center.x,h+2.9,center.z,.5,1,.5,yaw);
+      }else if(this.terrain.vegetationClear(center.x,center.z,18)){
+        const floor=foundation(center.x,center.z,landmark.kind==='mill'?12:19,15,yaw);
+        if(floor!==null){
+          place('brick',center.x,floor+3.4,center.z,landmark.kind==='mill'?12:19,6.8,15,yaw,'box',true);
+          place('roof',center.x,floor+8,center.z,landmark.kind==='mill'?13:20,3.7,16,yaw,'roof');
+          place('wood',center.x,floor+2,center.z,4,4,15.08,yaw);
+          if(landmark.kind==='mill')place('foundation',center.x,floor+5.5,center.z,5,11,5,yaw,'box',true);
+        }
+      }
+      // Open farm entrances have gateposts beside the opening, never across the road.
+      for(const along of [-10,10]){
+        const post=a.p.clone().addScaledVector(a.r,side*(road.width/2+2.6)).addScaledVector(a.t,along);
+        const h=this.terrain.groundHeight(post.x,post.z);place('wood',post.x,Math.max(h,a.p.y)+.65,post.z,.24,1.3,.24,yaw);
       }
     }
     for(const batch of batches.values()){

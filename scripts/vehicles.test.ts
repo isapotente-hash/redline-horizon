@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
-import {RoadNetwork} from '../src/world/RoadNetwork';
+import {RoadNetwork,roadHeight} from '../src/world/RoadNetwork';
 import {roadRibbon} from '../src/world/roadGeometry';
 import {PhysicsWorld,VehiclePhysics,R} from '../src/physics/VehiclePhysics';
 import {CARS,isBike} from '../src/vehicles/CarCatalog';
@@ -55,6 +55,7 @@ test('road shoulders provide upward solid support all the way past both guardrai
  p.world.step();
  for(const road of roads.roads)for(let i=1;i<road.samples.length-1;i+=7)for(const side of [-1,1])for(const width of [.02,.6,1.3,1.8,2.2]) {
   const a=road.samples[i],b=road.samples[i+1],point=a.p.clone().lerp(b.p,.5).addScaledVector(a.r.clone().lerp(b.r,.5),side*(road.width/2+width));
+  point.y=T.MathUtils.lerp(roadHeight(a,side*(road.width/2+width)),roadHeight(b,side*(road.width/2+width)),.5);
   const hit=p.world.castRay(new R.Ray({x:point.x,y:point.y+2,z:point.z},{x:0,y:-1,z:0}),3,true);
   assert.ok(hit,`${road.name} shoulder missing at ${i}/${side}/${width}`);assert.ok(Math.abs(hit.timeOfImpact-2)<.025);checks++;
  }

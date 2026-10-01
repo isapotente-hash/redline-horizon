@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
-import {RoadNetwork} from '../src/world/RoadNetwork';
+import {RoadNetwork,roadHeight,surfaceBank} from '../src/world/RoadNetwork';
 import {World} from '../src/world/World';
 import {TerrainSampler} from '../src/world/TerrainSampler';
 import {PhysicsWorld,VehiclePhysics,R} from '../src/physics/VehiclePhysics';
@@ -34,8 +34,8 @@ test('actual world collision: every driving lane is clear across every road, inc
  await ready;let checked=0;
  const shape=new R.Cuboid(.92,.2,2.1),up=new T.Vector3(),right=new T.Vector3(),q=new T.Quaternion(),basis=new T.Matrix4();
  for(const road of roads.roads)for(let d=6;d<road.length-6;d+=8)for(const lane of [-.3,0,.3]){
-   const a=roads.at(road,d),p=a.p.clone().addScaledVector(a.r,lane*road.width);p.y+=.65;
-   right.set(-a.t.z,0,a.t.x).normalize();up.crossVectors(right,a.t).normalize();q.setFromRotationMatrix(basis.makeBasis(right,up,a.t.clone().negate()));
+   const a=roads.at(road,d),p=a.p.clone().addScaledVector(a.r,lane*road.width);p.y=roadHeight(a,lane*road.width)+.65;
+   right.set(-a.t.z,0,a.t.x).normalize();up.crossVectors(right,a.t).normalize();q.setFromRotationMatrix(basis.makeBasis(right,up,a.t.clone().negate()));q.multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(0,0,1),surfaceBank(a)));
    let hit=false;physics.world.intersectionsWithShape(p,q,shape,()=>{hit=true;return false});
    assert.equal(hit,false,`${road.name} at ${d}m, lane ${lane}: obstructing collider`);checked++;
  }
@@ -156,4 +156,24 @@ test('on-foot exits and walking remain supported on the real coastal tunnel road
  for(let i=0;i<300;i++){foot.preStep({...coast,throttle:1},yaw,STEP);physics.world.step();foot.postStep();const hit=roads.nearest(foot.position.x,foot.position.z);assert.ok(foot.position.y>hit.height+.7,'capsule fell through tunnel road');}
  assert.ok(foot.position.distanceTo(origin)>5);assert.equal(foot.enter(car),false,'cannot re-enter at distance');foot.enter(car,true);
  physics.world.removeCharacterController(foot.controller);physics.world.removeRigidBody(foot.body);physics.world.removeVehicleController(car.controller);physics.world.removeRigidBody(car.body);
+});
+
+test('both new scenic routes are driveable through their banks, hairpins and graded attachments',async()=>{
+ await ready;const car=new VehiclePhysics(physics,roads,{...defaults});
+ try{
+  for(const name of ['BRACKEN LANE','HIGHLAND SWITCHBACKS']){
+   const road=roads.roads.find(r=>r.name===name)!;car.teleport(road,90,road.width*.23);await world.prime(car.position);
+   for(let i=0;i<100;i++){car.preStep(stopped,STEP);physics.world.step();car.postStep(STEP);}
+   const pilot=new Autopilot(roads);pilot.toggle(car);let completed=false,maxUp=0;
+   for(let i=0;i<60000;i++){
+    car.preStep(pilot.controls(car,90,'full',coast,{routeChoices:false},STEP),STEP);physics.world.step();car.postStep(STEP);
+    const hit=roads.nearest(car.position.x,car.position.z,false,road);maxUp=Math.max(maxUp,car.body.linvel().y);
+    assert.ok(Math.abs(hit.offset)<road.width/2+.2,`${name}: left paved corridor at ${hit.sample.d}/${hit.offset}`);
+    assert.ok(car.position.y>hit.height+.18,`${name}: chassis fell under pavement`);assert.ok(car.body.linvel().y<10,`${name}: launch`);
+    if(hit.sample.d>road.length-70){completed=true;break;}
+    if(i%240===0){world.update(car.position,true);await new Promise(resolve=>setTimeout(resolve,0));}
+   }
+   assert.ok(completed,`${name}: did not complete`);console.log({route:name,maxUp});
+  }
+ }finally{physics.world.removeVehicleController(car.controller);physics.world.removeRigidBody(car.body);}
 });

@@ -7,6 +7,8 @@ import { Settings } from "../core/SaveManager";
 import { Controls } from "../input/InputManager";
 import { RoadNetwork, Road } from "../world/RoadNetwork";
 import {DriftSystem} from '../vehicles/DriftSystem';
+import {traitsFor} from '../vehicles/VehicleTraits';
+import {roadHeight,surfaceBank} from '../world/RoadNetwork';
 export const R = RAPIER;
 export class PhysicsWorld {
   world!: RAPIER.World;
@@ -72,12 +74,13 @@ export class VehiclePhysics {
   collider: RAPIER.Collider;
   private _spec:CarSpec=CARS[0];
   chassis=chassisFor(CARS[0]);
+  traits=traitsFor(CARS[0]);
   wheelie=0;
   lean=0;
   get bike(){return isBike(this._spec);}
   get spec(){return this._spec;}
   set spec(spec:CarSpec) {
-    this._spec=spec;this.chassis=chassisFor(spec);this.wheelie=this.lean=0;
+    this._spec=spec;this.chassis=chassisFor(spec);this.traits=traitsFor(spec);this.wheelie=this.lean=0;
     const c=this.chassis;
     this.collider.setShape(new RAPIER.Cuboid(c.halfBody[0],c.halfBody[1],c.halfBody[2]));
     this.collider.setMass(c.mass);this.body.recomputeMassPropertiesFromColliders();
@@ -138,6 +141,7 @@ export class VehiclePhysics {
     this.physics.world.contactPair(this.collider,other,this.scrapeManifold);
   };
   shiftTimer = 0;
+  shiftSerial=0;
   braking = 0;
   throttle = 0;
   roll = 0;
@@ -189,6 +193,7 @@ export class VehiclePhysics {
     if (this.shiftTimer <= 0) {
       this.gear = clamp(this.gear + direction, 1, 8);
       this.shiftTimer = 0.18;
+      this.shiftSerial++;
     }
   }
   teleport(
@@ -198,11 +203,11 @@ export class VehiclePhysics {
   ) {
     const s = this.roads.at(road, d),
       p = s.p.clone().addScaledVector(s.r, offset);
-    this.setPosition(p.x,p.y+this.chassis.rideHeight,p.z,Math.atan2(-s.t.x,-s.t.z),Math.asin(clamp(s.t.y,-1,1)));
+    this.setPosition(p.x,roadHeight(s,offset)+this.chassis.rideHeight,p.z,Math.atan2(-s.t.x,-s.t.z),Math.asin(clamp(s.t.y,-1,1)),surfaceBank(s));
   }
-  setPosition(x: number, y: number, z: number, yaw: number, pitch=0) {
+  setPosition(x: number, y: number, z: number, yaw: number, pitch=0,bank=0) {
     this.teleportSerial++;
-    const q = new T.Quaternion().setFromEuler(new T.Euler(pitch,yaw,0,"YXZ"));
+    const q = new T.Quaternion().setFromEuler(new T.Euler(pitch,yaw,bank,"YXZ"));
     this.body.setTranslation({ x, y, z }, true);
     this.body.setRotation(q, true);
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
@@ -289,17 +294,17 @@ export class VehiclePhysics {
     const wheelRpm = (Math.abs(this.signedSpeed) / (this.chassis.radius * Math.PI * 2)) * 60;
     const rpmTarget = Math.max(
       850 + input.throttle * 1500,
-      wheelRpm * ratios[this.gear - 1] * this.tune.finalDrive,
+      wheelRpm * ratios[this.gear - 1] * this.tune.finalDrive * this.traits.finalDrive,
     );
     this.rpm = damp(this.rpm, clamp(rpmTarget, 850, 8650), 12, dt);
     if (this.settings.automatic && !this.reverse && this.shiftTimer === 0) {
-      if (this.rpm > 8050 && this.gear < 8) this.shift(1);
+      if (this.rpm > this.traits.redline && this.gear < 8) this.shift(1);
       else if (this.rpm < 3300 && this.gear > 1) this.shift(-1);
     }
     let force =
       ((torque(Math.max(this.rpm, input.throttle * 3500)) *
         ratios[this.gear - 1] *
-        this.tune.finalDrive *
+        this.tune.finalDrive * this.traits.finalDrive *
         0.9) /
         this.chassis.radius) *
       input.throttle *
@@ -307,7 +312,7 @@ export class VehiclePhysics {
     force *= this.spec.power * this.tune.enginePower * this.chassis.forceScale;
     if(off && this.spec.kit==='pickup')grip*=1.65;
     if(off && this.spec.kit==='sportbike')grip*=.82;
-    grip *= this.spec.handling * (off?this.tune.loose:this.settings.weather==="rain"?this.tune.wet:this.tune.dry);
+    grip *= this.spec.handling * (off?this.tune.loose*this.traits.loose:this.settings.weather==="rain"?this.tune.wet*this.traits.wet:this.tune.dry);
     if (this.shiftTimer > 0) force *= 0.12;
     if (this.settings.traction)
       force *= 1 - clamp((Math.abs(this.slip) - 0.12) * 1.5, 0, 0.75);
@@ -329,7 +334,7 @@ export class VehiclePhysics {
     b.addForce(
       {
         x: -this.forward.x * drag * sign,
-        y: -Math.min(10500, 1.3 * this.speed * this.speed) * (this.bike?.1:1),
+        y: -Math.min(10500, 1.3 * this.speed * this.speed) * this.traits.aero,
         z: -this.forward.z * drag * sign,
       },
       true,
@@ -377,11 +382,11 @@ export class VehiclePhysics {
     }
     for (let i = 0; i < 4; i++) {
       this.setWheelValue(0,i,14000*this.chassis.mass/1550*(this.bike&&i<2?1-clamp(this.wheelie/.12,0,1):1));
-      this.setWheelValue(1,i, i >= 2 ? force / 2 : 0);
+      this.setWheelValue(1,i, this.traits.drive==="AWD"?force*(i<2?.20:.30):i >= 2 ? force / 2 : 0);
       this.setWheelValue(2,i, i < 2 ? this.steering : 0);
       this.setWheelValue(3,
         i,
-        (this.braking * 4700 * this.chassis.mass/1550 * this.tune.brakeForce * 2 * (i<2?this.tune.frontBias:1-this.tune.frontBias) + (input.handbrake && i >= 2 ? 12500*this.chassis.mass/1550 : 0)) * dt,
+        (this.braking * 4700 * this.chassis.mass/1550 * this.tune.brakeForce * this.traits.brakes * 2 * (i<2?this.tune.frontBias:1-this.tune.frontBias) + (input.handbrake && i >= 2 ? 12500*this.chassis.mass/1550 : 0)) * dt,
       );
       this.setWheelValue(4,
         i,
@@ -399,7 +404,7 @@ export class VehiclePhysics {
       this.wheelFilter,
     );
     this.wheelSpin -= (this.signedSpeed * dt) / this.chassis.radius;
-    this.roll = damp(this.roll, clamp(-lateral * 0.005, -0.035, 0.035)*this.tune.bodyRoll, 4, dt);
+    this.roll = damp(this.roll, clamp(-lateral * 0.005, -0.035, 0.035)*this.tune.bodyRoll*this.traits.roll, 4, dt);
     this.pitch = damp(
       this.pitch,
       (this.braking - input.throttle) * 0.008,
@@ -418,6 +423,7 @@ export class VehiclePhysics {
       this.impact * Math.exp(-8 * dt),
       clamp((this.speed - next - 1.1) / 5, 0, 1),
     );
+    if(!this.bike){const longitudinal=(next-this.speed)/Math.max(1/240,dt);this.pitch=damp(this.pitch,clamp(-longitudinal*.003+this.braking*.012,-.05,.04)*this.tune.bodyRoll*this.traits.roll,6,dt);}
     this.speed = next;
     this.contacts = 0;
     for (let i = 0; i < 4; i++)

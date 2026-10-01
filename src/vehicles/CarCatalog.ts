@@ -4,6 +4,9 @@ export function chassisFor(spec:CarSpec) {
   if(isBike(spec))return {mass:260,halfWidth:.14,halfLength:.87,radius:.33,halfBody:[.29,.3,1.12] as const,rideHeight:.58,forceScale:.19,dragScale:.19,steerAngle:.56,steerFade:.038,response:1.8};
   if(spec.kit==='pickup')return {mass:2350,halfWidth:1.05,halfLength:1.65,radius:.43,halfBody:[1.04,.37,2.5] as const,rideHeight:.70,forceScale:1.10,dragScale:1.45,steerAngle:.43,steerFade:.060,response:.8};
   if(spec.kit==='roadster')return {mass:1150,halfWidth:.88,halfLength:1.3,radius:.35,halfBody:[.87,.19,1.98] as const,rideHeight:.58,forceScale:.9,dragScale:.82,steerAngle:.51,steerFade:.049,response:1.3};
+  if(spec.kit==='rally')return {mass:1450,halfWidth:.95,halfLength:1.43,radius:.365,halfBody:[.88,.2,2.1] as const,rideHeight:.60,forceScale:.98,dragScale:1.07,steerAngle:.5,steerFade:.055,response:1.12};
+  if(spec.kit==='gt')return {mass:1470,halfWidth:.95,halfLength:1.43,radius:.365,halfBody:[.88,.2,2.1] as const,rideHeight:.60,forceScale:1.02,dragScale:.96,steerAngle:.48,steerFade:.055,response:1.12};
+  if(spec.kit==='supercar')return {mass:1700,halfWidth:.95,halfLength:1.43,radius:.365,halfBody:[.88,.2,2.1] as const,rideHeight:.60,forceScale:1.1,dragScale:1.02,steerAngle:.48,steerFade:.055,response:1.16};
   return {mass:1550,halfWidth:.95,halfLength:1.43,radius:.365,halfBody:[.88,.2,2.1] as const,rideHeight:.60,forceScale:1,dragScale:1,steerAngle:.48,steerFade:.055,response:1};
 }
 export const CARS: readonly CarSpec[] = [

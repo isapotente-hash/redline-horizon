@@ -1,11 +1,11 @@
 import * as T from 'three';
-import {Road, RoadNetwork} from './RoadNetwork';
+import {Road, RoadNetwork,roadHeight} from './RoadNetwork';
 import {TerrainSampler} from './TerrainSampler';
 
 /** A shared, indexed sweep: visuals and physics use exactly the same boundary. */
 export function sweep(road:Road,start:number,end:number,profile:readonly (readonly [number,number])[],closed=false){
   const vertices:number[]=[],indices:number[]=[];
-  for(let i=start;i<=end;i++){const s=road.samples[i];for(const [offset,height] of profile)vertices.push(s.p.x+s.r.x*offset,s.p.y+height,s.p.z+s.r.z*offset);}
+  for(let i=start;i<=end;i++){const s=road.samples[i];for(const [offset,height] of profile)vertices.push(s.p.x+s.r.x*offset,roadHeight(s,offset)+height,s.p.z+s.r.z*offset);}
   const n=profile.length;
   for(let i=0;i<end-start;i++)for(let j=0;j<(closed?n:n-1);j++){const a=i*n+j,b=i*n+(j+1)%n;indices.push(a,a+n,b,b,a+n,b+n);}
   if(closed){for(let j=1;j<n-1;j++){indices.push(0,j,j+1);const a=(end-start)*n;indices.push(a,a+j+1,a+j);}}
@@ -30,7 +30,8 @@ export function supportGeometry(road:Road,terrain:TerrainSampler){
   const v:number[]=[],ix:number[]=[],n=road.samples.length,inner=road.width/2+2.3,verge=road.width/2+14;
   for(const a of road.samples){const bridge=structureRange(terrain.roads,road,a.d,"bridge"),outer=bridge?inner+.05:verge;for(const o of [-outer,-inner,inner,outer]){
     const x=a.p.x+a.r.x*o,z=a.p.z+a.r.z*o;
-    v.push(x,Math.abs(o)>inner&&!bridge?Math.min(a.p.y-.05,terrain.groundHeight(x,z)):a.p.y,z);
+    const side=Math.sign(o),edge=roadHeight(a,side*inner);
+    v.push(x,Math.abs(o)>inner&&!bridge?Math.min(edge-.05,terrain.groundHeight(x,z)):roadHeight(a,o),z);
   }
   }
   for(let i=0;i<n-1;i++)for(let k=0;k<3;k++){const a=i*4+k;ix.push(a,a+1,a+4,a+1,a+5,a+4);}

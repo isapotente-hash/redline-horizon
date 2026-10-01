@@ -100,7 +100,7 @@ export class CameraManager {
     this.teleportSerial=car.teleportSerial;this.lastMode=this.mode;
     this.speed=instant?car.speed:damp(this.speed,car.speed,8,dt);
     let chase=false;
-    if(state==='menu'||state==='statistics'||state==='leaderboard'||state==='dev'||state==='garage'){
+    if(state==='menu'||state==='statistics'||state==='leaderboard'||state==='dev'||state==='activities'||state==='garage'){
       const yaw=Math.atan2(-forward.x,-forward.z)+Math.PI*.84+Math.sin(t*.07)*.16,d=state==='garage'?7.3:8.6;
       desired.copy(p).add(this.offset.set(Math.sin(yaw)*d,2.2,Math.cos(yaw)*d));
       aim.copy(p);aim.y+=.1;
@@ -146,7 +146,7 @@ export class CameraManager {
       if(this.lastCrash>=0&&crash!==this.lastCrash)this.shakePulse=Math.max(this.shakePulse,.045*clamp(car.crashSeverity||.4,0,1));
       this.shakePulse*=Math.exp(-7*dt);this.shakeTime+=dt;
       const rough=(car.surface==='GRASS'||car.surface==='GRAVEL')&&car.contacts>0?clamp(this.speed/65,0,1)*.016:0;
-      const amplitude=Math.min(.045,rough+this.shakePulse+(car.impact||0)*.012+(car.scrape||0)*.012);
+      const amplitude=Math.min(.045,rough+this.shakePulse+(car.impact||0)*.012+(car.scrape||0)*.012)*(car.settings?.cameraMotion??1);
       if(amplitude>.0001){
         this.shakeOffset.set(Math.sin(this.shakeTime*67)*amplitude,Math.sin(this.shakeTime*83)*amplitude*.65,0).applyQuaternion(this.camera.quaternion);
         this.shakeBase.copy(this.camera.position);this.camera.position.add(this.shakeOffset);this.constrain(car,p,this.camera.position);this.shakeOffset.subVectors(this.camera.position,this.shakeBase);this.camera.lookAt(this.target);

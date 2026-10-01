@@ -1,7 +1,7 @@
 import { CARS } from '../vehicles/CarCatalog';
 
-export const PROTOCOL = 'rh4-riders-race-3';
-export const ROOM_PREFIX = 'redline-horizon-riders-3-';
+export const PROTOCOL = 'rh4-rural-lobby-4';
+export const ROOM_PREFIX = 'redline-horizon-rural-lobby-4-';
 export const MAX_PLAYERS = 5;
 export const PLAYER_COLORS = [0x65fff1,0xffd166,0xb79cff,0xff82b2,0x93e875];
 export const validSlot = (v:unknown):v is number => Number.isInteger(v) && Number(v)>=0 && Number(v)<MAX_PLAYERS;

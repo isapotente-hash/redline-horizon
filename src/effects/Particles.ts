@@ -21,6 +21,9 @@ export class Particles {
   skidIndex = 0;
   skidClock = 0;
   dummy = new T.Object3D();
+  private readonly point=new T.Vector3();private readonly smoke=new T.Color('#bbc1c9');private readonly dust=new T.Color('#b7aa8b');private readonly sprayColor=new T.Color('#b1c2ce');
+  private readonly fire=new T.Color('#ff791d');private readonly bright=new T.Color('#fff2ac');private readonly dark=new T.Color('#48443f');private readonly nitro=new T.Color('#65dfff');
+  private lastShift=-1;private lastBoost=-1;private exhaustClock=0;
   constructor() {
     this.geometry.setAttribute(
       "position",
@@ -73,31 +76,31 @@ export class Particles {
   }
   emit(p: T.Vector3, color: T.Color, size: number) {
     const i = this.cursor++ % this.count;
-    this.positions.set([p.x, p.y, p.z], i * 3);
-    this.colors.set([color.r, color.g, color.b], i * 3);
-    this.velocity.set(
-      [
-        (Math.random() - 0.5) * 1.7,
-        Math.random() + 0.5,
-        (Math.random() - 0.5) * 1.7,
-      ],
-      i * 3,
-    );
+    const j=i*3;this.positions[j]=p.x;this.positions[j+1]=p.y;this.positions[j+2]=p.z;
+    this.colors[j]=color.r;this.colors[j+1]=color.g;this.colors[j+2]=color.b;
+    this.velocity[j]=(Math.random()-.5)*1.7;this.velocity[j+1]=Math.random()+.5;this.velocity[j+2]=(Math.random()-.5)*1.7;
     this.gravity[i]=0;
     this.life[i] = 1;
     this.sizes[i] = size;
   }
   explode(p:T.Vector3,severity:number) {
-    this.flash.position.copy(p).add(new T.Vector3(0,1,0));this.flash.intensity=170*severity;
+    this.flash.position.copy(p);this.flash.position.y+=1;this.flash.intensity=170*severity;
     for(let n=0;n<100;n++) {
       const i=this.cursor%this.count,smoke=n>60;
-      this.emit(p,new T.Color(smoke?"#48443f":n%3?"#ff791d":"#fff2ac"),smoke?1.2:.4);
+      this.emit(p,smoke?this.dark:n%3?this.fire:this.bright,smoke?1.2:.4);
       const a=Math.random()*Math.PI*2,r=(4+Math.random()*14)*severity;
-      this.velocity.set([Math.cos(a)*r,(2+Math.random()*9)*severity,Math.sin(a)*r],i*3);
+      this.velocity[i*3]=Math.cos(a)*r;this.velocity[i*3+1]=(2+Math.random()*9)*severity;this.velocity[i*3+2]=Math.sin(a)*r;
       this.gravity[i]=smoke?-1:8;this.life[i]=smoke?1.5:.45+Math.random()*.45;
     }
   }
   update(dt: number, car: VehiclePhysics, s: Settings, active: boolean) {
+    const changed=this.lastShift>=0&&this.lastShift!==car.shiftSerial,boosted=this.lastBoost>=0&&this.lastBoost!==car.boostSerial;
+    this.lastShift=car.shiftSerial;this.lastBoost=car.boostSerial;this.exhaustClock+=dt;
+    if(active&&car.speed>5&&(changed||boosted||(car.boosting&&this.exhaustClock>.075))){
+      this.exhaustClock=0;this.point.copy(car.position).addScaledVector(car.forward,-car.chassis.halfLength-1);this.point.y-=.18;
+      const i=this.cursor%this.count;this.emit(this.point,car.boosting?this.nitro:this.fire,.17);this.life[i]=.12;
+      this.velocity[i*3]=-car.forward.x*3;this.velocity[i*3+1]=.1;this.velocity[i*3+2]=-car.forward.z*3;
+    }
     this.flash.intensity*=Math.exp(-9*dt);
     for (let i = 0; i < this.count; i++) {
       if (this.life[i] <= 0) continue;
@@ -117,15 +120,14 @@ export class Particles {
       (slipping || offroad || spray) &&
       car.speed > 5
     ) {
-      for (const side of car.bike?[0]:[-1, 1]) {
-        const p = car.position
-          .clone()
+      for (let n=0;n<(car.bike?1:2);n++) {
+        const side=car.bike?0:n===0?-1:1,p = this.point.copy(car.position)
           .addScaledVector(car.right, side * car.chassis.halfWidth)
           .addScaledVector(car.forward, -car.chassis.halfLength);
         p.y -= 0.42;
         this.emit(
           p,
-          new T.Color(spray ? "#b1c2ce" : offroad ? "#b7aa8b" : "#bbc1c9"),
+          spray ? this.sprayColor : offroad ? this.dust : this.smoke,
           0.3,
         );
       }
@@ -148,7 +150,7 @@ export class Particles {
           y = car.position.y + Math.random() * 26;
           z = car.position.z + (Math.random() - 0.5) * 60;
         }
-        this.rainPositions.set([x, y, z, x - 0.08, y + 1.1, z + 0.1], j);
+        this.rainPositions[j]=x;this.rainPositions[j+1]=y;this.rainPositions[j+2]=z;this.rainPositions[j+3]=x-.08;this.rainPositions[j+4]=y+1.1;this.rainPositions[j+5]=z+.1;
       }
       this.rainGeometry.getAttribute("position").needsUpdate = true;
     }
@@ -161,9 +163,8 @@ export class Particles {
       this.skidClock > 0.025
     ) {
       this.skidClock = 0;
-      for (const side of [-1, 1]) {
-        const p = car.position
-          .clone()
+      for (let n=0;n<2;n++) {
+        const side=n===0?-1:1,p = this.point.copy(car.position)
           .addScaledVector(car.right, side * 0.97)
           .addScaledVector(car.forward, -1.43);
         p.y = car.roads.nearest(p.x, p.z).height + 0.025;

@@ -1,8 +1,10 @@
+import {validRoute,RouteId} from "../racing/RouteCatalog";
 import { SAVE_KEY, BACKUP_KEY, SAVE_VERSION, readSave, record } from "./SaveStorage";
 import { CARS, carSpec } from "../vehicles/CarCatalog";
 import { Loadout, STOCK, UPGRADES, UPGRADE_SLOTS } from "../vehicles/UpgradeCatalog";
 import {LapRecord,MAX_LAP_RECORDS,validLapRecords} from '../racing/LapRecords';
 export type Settings = {
+  cameraMotion:number;
   adaptiveResolution:boolean;
   renderDistance: number;
   simulationDistance: number;
@@ -25,6 +27,7 @@ export type Settings = {
   units: "kmh" | "mph";
 };
 export const defaults: Settings = {
+  cameraMotion:1,
   adaptiveResolution:true,
   renderDistance: 1600,
   simulationDistance: 600,
@@ -50,7 +53,7 @@ function validSettings(value:unknown):Settings {
   const result={...defaults}, a=record(value)?value:{};
   for(const key of ['adaptiveResolution','autopilotRoutes','cycle','automatic','traction','stability'] as const)
     if(typeof a[key]==='boolean')result[key]=a[key];
-  const bounds={renderDistance:[500,3000],simulationDistance:[250,1000],autopilotSpeed:[30,180],hour:[0,24],volume:[0,1],tint:[0,1],camera:[0,6]} as const;
+  const bounds={cameraMotion:[0,1],renderDistance:[500,3000],simulationDistance:[250,1000],autopilotSpeed:[30,180],hour:[0,24],volume:[0,1],tint:[0,1],camera:[0,6]} as const;
   for(const key of Object.keys(bounds) as (keyof typeof bounds)[])
     if(Number.isFinite(a[key]))result[key]=Math.max(bounds[key][0],Math.min(bounds[key][1],a[key]));
   result.camera=Math.floor(result.camera);
@@ -130,6 +133,8 @@ export class SaveManager {
     this.lapRecords.sort((a,b)=>a.time-b.time||a.date-b.date);this.lapRecords.length=Math.min(this.lapRecords.length,MAX_LAP_RECORDS);
     this.save();return true;
   }
+  routeBests:Partial<Record<RouteId,number>>={};
+  recordRoute(id:RouteId,time:number){if(!validRoute(id)||!Number.isFinite(time)||time<=0||time>21600)return;this.routeBests[id]=Math.min(this.routeBests[id]||Infinity,time);this.save();}
   best = 0;
   distance = 0;
   position: { x: number; y: number; z: number; yaw: number } | null = null;
@@ -143,6 +148,7 @@ export class SaveManager {
         this.settings = validSettings(a.settings);
         for(const key of Object.keys(this.statistics) as (keyof typeof this.statistics)[]){const value=a.statistics?.[key];if(Number.isFinite(value)&&value>=0)this.statistics[key]=value;}
         if(a.performanceEdition===5)this.settings.quality=defaults.quality;
+        if(record(a.routeBests))for(const [id,time] of Object.entries(a.routeBests))if(validRoute(id)&&typeof time==="number"&&time>0&&time<=21600)this.routeBests[id]=time;
         this.best = nonnegative(a.best);
         this.bestByLaps={1:this.best,3:nonnegative(a.bestByLaps?.[3])};
         this.legacyRecords=record(a.legacyRecords)?a.legacyRecords:{};
@@ -179,7 +185,7 @@ export class SaveManager {
         coins:this.coins,ownedCars:[...this.ownedCars],selectedCar:this.selectedCar,
         collectedCoins:[...this.collectedCoins],unlockedTracks:this.unlockedTracks,
         loadouts:this.loadouts,ownedUpgrades:this.ownedUpgrades,rewardMeters:this.rewardMeters,
-        settings:this.settings,best:this.best,bestByLaps:this.bestByLaps,lapRecords:this.lapRecords,
+        settings:this.settings,routeBests:this.routeBests,best:this.best,bestByLaps:this.bestByLaps,lapRecords:this.lapRecords,
         layoutVersion:2,legacyRecords:this.legacyRecords,distance:this.distance,
         statistics:this.statistics,position:this.position,
       });

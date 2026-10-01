@@ -146,3 +146,32 @@ test('host ghost rule synchronizes with 2–5 drivers, late joiners and cannot b
   host.leave();await flush();assert.ok(clients.every(c=>c.ghost&&!c.connected));
  }finally{clients.forEach(c=>c.leave());}
 });
+
+test('lobby rules are host controlled, reset readiness and await route preparation on every peer',async()=>{
+ const host=new RaceConnection(async()=>Peer,()=>100000),guest=new RaceConnection(async()=>Peer,()=>101000);let releaseHost!:(ok:boolean)=>void,releaseGuest!:(ok:boolean)=>void;
+ const starts:any[]=[];
+ try{
+  host.setCar('pulse');guest.setCar('spectre');await host.open(true);await flush();await guest.open(false,host.code);await flush();
+  const settings={route:'bracken',laps:1,vehicleClass:'bikes',startRule:'rolling'} as const;
+  assert.equal(guest.setRaceSettings(settings),false);assert.equal(host.setRaceSettings(settings),true);await flush();
+  assert.deepEqual(guest.raceSettings,settings);assert.equal(host.raceReady,false);host.requestRace(1);await flush();assert.equal(host.pendingRace,false);
+  host.setReady(true);guest.setReady(true);await flush();assert.equal(host.raceReady,true);
+  host.prepareRace=()=>new Promise(resolve=>releaseHost=resolve);guest.prepareRace=()=>new Promise(resolve=>releaseGuest=resolve);
+  host.onStart=(...args)=>starts.push(args);guest.onStart=(...args)=>starts.push(args);
+  host.requestRace(1);await flush();assert.ok(host.pendingRace&&guest.pendingRace);assert.equal(starts.length,0);
+  releaseGuest(true);await flush();assert.equal(starts.length,0,'host terrain must also finish loading');
+  releaseHost(true);await flush();assert.equal(starts.length,2);assert.deepEqual(starts[0][3],settings);assert.deepEqual(starts[1][3],settings);assert.equal(Math.abs(starts[0][1]-starts[1][1]),1000);
+  assert.equal(host.setGhost(false),false);assert.equal(host.setRaceSettings({...settings,route:'coast'}),false,'active race settings stay locked');
+ }finally{host.leave();guest.leave();}
+});
+test('incompatible vehicle classes and failed route loads cannot start a room race',async()=>{
+ const host=new RaceConnection(async()=>Peer),guest=new RaceConnection(async()=>Peer);let starts=0;
+ try{
+  await host.open(true);await flush();await guest.open(false,host.code);await flush();
+  host.setRaceSettings({route:'coast',laps:1,vehicleClass:'bikes',startRule:'grid'});await flush();assert.equal(host.setReady(true),false);assert.equal(guest.setReady(true),false);host.requestRace(1);await flush();assert.equal(host.pendingRace,false);
+  host.setCar('pulse');guest.setCar('pulse');host.setReady(true);guest.setReady(true);await flush();
+  host.onStart=guest.onStart=()=>starts++;guest.prepareRace=()=>false;host.requestRace(1);await flush();assert.equal(starts,0);assert.equal(host.pendingRace,false);assert.equal(guest.pendingRace,false);
+  assert.equal(host.setRaceSettings({route:'coast',laps:3,vehicleClass:'all',startRule:'grid'} as any),false);
+  assert.equal(host.setRaceSettings({route:'missing',laps:1,vehicleClass:'all',startRule:'grid'} as any),false);
+ }finally{host.leave();guest.leave();}
+});

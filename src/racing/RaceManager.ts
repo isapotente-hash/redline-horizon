@@ -1,9 +1,15 @@
 import * as T from "three";
-import { RoadNetwork } from "../world/RoadNetwork";
+import { RoadNetwork,surfaceBank } from "../world/RoadNetwork";
 import { PhysicsWorld, VehiclePhysics } from "../physics/VehiclePhysics";
 import { TrafficManager } from "../vehicles/TrafficManager";
+import {recoverVehicle} from "../vehicles/Recovery";
+import {RouteId,routeRoad} from "./RouteCatalog";
 import { clamp, damp, wrap } from "../core/math";
 export class RaceManager {
+  route:import("../world/RoadNetwork").Road;routeId:RouteId="horizon";practice=false;
+  get totalLength(){return this.route.closed?this.route.length:this.route.length-this.startDistance-16;}
+  routeDistance(progress:number){return this.route.closed?wrap(this.startDistance+progress,this.route.length):Math.min(this.route.length-16,this.startDistance+progress);}
+  recover(car:VehiclePhysics){const progress=Math.min(this.totalLength,(this.checkpoint%this.count)*this.totalLength/this.count);const ok=recoverVehicle(car,this.route,this.routeDistance(progress));if(ok&&this.active&&this.countdown<=0&&!this.networkRace)this.elapsed+=3;return ok;}
   networkRace=false;
   playerProgress=0;
   networkCount=2;
@@ -34,11 +40,15 @@ export class RaceManager {
     for(const p of this.opponents.values()){if(p.finished)finished++;else if(!p.connected)dnf++;}
     return `${finished}/${this.networkCount-1} OPPONENTS FINISHED${dnf?` · ${dnf} DISCONNECTED`:''}${finished+dnf<this.networkCount-1?' · POSITION PROVISIONAL':''}`;
   }
+  get standings(){
+    return [{slot:this.localSlot,finished:this.finished,time:this.resultTime,connected:true,progress:this.playerProgress},...Array.from(this.opponents,([slot,p])=>({slot,...p}))]
+      .sort((a,b)=>Number(b.finished)-Number(a.finished)||(a.finished?a.time-b.time:Number(b.connected)-Number(a.connected)||b.progress-a.progress)||a.slot-b.slot);
+  }
   active = false;
   finished = false;
   elapsed = 0;
   lapSerial=0;lastLapTime=0;lastLapNumber=0;lastLapAssisted=false;assistUsed=false;
-  private lapStartedAt=0;
+  private lapStartedAt=0;private readonly gateForward=new T.Vector3();private readonly gateDelta=new T.Vector3();
   countdown = 0;
   checkpoint = 0;
   count = 19;
@@ -66,7 +76,7 @@ export class RaceManager {
     public roads: RoadNetwork,
     physics: PhysicsWorld,
   ) {
-    this.count = Math.ceil(roads.main.length / 380);
+    this.route=roads.main;this.count = Math.ceil(roads.main.length / 380);
     this.ai = new TrafficManager(roads, physics, 7);
     this.ai.root.visible = false;
     this.ai.active = false;
@@ -109,10 +119,12 @@ export class RaceManager {
     for(const side of [-1,1]){const pole=new T.Mesh(new T.CylinderGeometry(.12,.12,6.2,8),white);pole.position.set(side*8.7,3.1,0);this.finish.add(pole);}
     const line=roads.at(roads.main,this.startDistance);this.finish.position.copy(line.p);this.finish.rotation.y=Math.atan2(line.t.x,line.t.z);this.finish.visible=false;
   }
-  start(car: VehiclePhysics, laps=1, network=false) {
+  start(car: VehiclePhysics, laps=1, network=false,routeId:RouteId="horizon") {
+    this.routeId=routeId;this.route=routeRoad(this.roads,routeId);this.practice=false;this.startDistance=this.route.closed?120:80;this.count=Math.ceil(this.totalLength/380);
     this.networkRace=network;this.playerProgress=0;this.configurePlayers([0,1],0);
     this.rewardClaimed=false;this.rewardEarned=0;
-    this.laps=laps===3?3:1;this.finish.visible=true;
+    this.laps=this.route.closed&&laps===3?3:1;this.finish.visible=true;
+    const line=this.roads.at(this.route,this.route.closed?this.startDistance:this.route.length-16);this.finish.position.copy(line.p);this.finish.rotation.set(-Math.asin(clamp(line.t.y,-1,1)),Math.atan2(line.t.x,line.t.z),surfaceBank(line),"YXZ");this.finish.scale.x=this.route.width/16;
     this.active = true;
     this.finished = false;
     this.elapsed = 0;
@@ -125,15 +137,15 @@ export class RaceManager {
     this.ai.active = !network;
     this.progress = this.ai.cars.map((c, i) => {
       if(network){c.body.setEnabled(false);return 0;}
-      c.d = this.startDistance + 12 + Math.floor(i / 2) * 7;
-      c.lane = i % 2 ? 5.5 : 2;
+      c.road=this.route;c.turn=undefined;c.d = this.startDistance + 12 + Math.floor(i / 2) * 7;
+      c.lane = (i % 2 ? .32 : -.10)*this.route.width;
       c.direction = 1;
       c.speed = 0;
       c.target = 53 + i * 0.8;
       c.body.setEnabled(true);this.ai.recover(c);
       return c.d - this.startDistance;
     });
-    car.teleport(this.roads.main, this.startDistance);
+    car.teleport(this.route, this.startDistance);
     this.placeGate();
   }
   cancel() {
@@ -147,12 +159,11 @@ export class RaceManager {
   }
   placeGate() {
     const a = this.roads.at(
-      this.roads.main,
-      this.startDistance +
-        ((this.checkpoint + 1) * this.roads.main.length) / this.count,
+      this.route,
+      this.routeDistance(((this.checkpoint + 1) * this.totalLength) / this.count),
     );
     this.gate.position.copy(a.p);
-    this.gate.rotation.y = Math.atan2(a.t.x, a.t.z);
+    this.gate.rotation.set(-Math.asin(clamp(a.t.y,-1,1)),Math.atan2(a.t.x,a.t.z),surfaceBank(a),"YXZ");this.gate.scale.x=this.route.width/16;
     this.gate.visible = true;
   }
   update(dt: number, car: VehiclePhysics) {
@@ -161,27 +172,27 @@ export class RaceManager {
     if(!this.networkRace)this.countdown -= dt;
     if (this.countdown > 0) return;
     if(!this.networkRace)this.elapsed += dt;
-    const length = this.roads.main.length;
+    const length = this.totalLength;
     for (let i = 0; !this.networkRace && i < this.ai.cars.length; i++) {
       const c = this.ai.cars[i];
       if(this.ai.crashStep(c,dt,car.position))continue;
       const
-        a = this.roads.at(this.roads.main, c.d),
-        b = this.roads.at(this.roads.main, c.d + 70),
+        a = this.roads.at(this.route, c.d),
+        b = this.roads.at(this.route, c.d + 70),
         turn = a.t.angleTo(b.t),
         target =
           Math.min(c.target, Math.sqrt((9.8 * 70) / Math.max(0.02, turn))) *
           (0.88 + i * 0.015);
       c.speed = damp(c.speed, Math.min(target, 10 + this.elapsed * 9), 1.8, dt);
       this.progress[i] += c.speed * dt;
-      c.d = wrap(this.startDistance + this.progress[i], length);
+      c.d = this.routeDistance(this.progress[i]);
       this.ai.pose(c, dt);
     }
     const next = this.gate.position;
-    const gateForward=new T.Vector3(0,0,1).applyQuaternion(this.gate.quaternion);
-    if (car.position.distanceTo(next) < 19 && car.position.clone().sub(next).dot(gateForward)>=-1) {
+    const gateForward=this.gateForward.set(0,0,1).applyQuaternion(this.gate.quaternion);
+    if (car.position.distanceTo(next) < 19 && this.gateDelta.copy(car.position).sub(next).dot(gateForward)>=-1) {
       this.checkpoint++;
-      if(this.checkpoint%this.count===0){
+      if(this.route.closed&&this.checkpoint%this.count===0){
         this.lastLapTime=this.elapsed-this.lapStartedAt;this.lapStartedAt=this.elapsed;
         this.lastLapNumber=this.checkpoint/this.count;this.lastLapAssisted=this.assistUsed;this.assistUsed=false;this.lapSerial++;
       }
@@ -200,19 +211,14 @@ export class RaceManager {
       }
       this.placeGate();
     }
-    const n = this.roads.nearest(car.position.x, car.position.z,false,this.roads.main),
-      since = wrap(
-        n.sample.d -
-          this.startDistance -
-          (this.checkpoint * length) / this.count,
-        length,
-      ),
+    const n = this.roads.nearest(car.position.x, car.position.z,false,this.route),
+      since = this.route.closed?wrap(n.sample.d-this.startDistance-(this.checkpoint*length)/this.count,length):Math.max(0,n.sample.d-this.startDistance-(this.checkpoint*length)/this.count),
       playerProgress =
         (this.checkpoint * length) / this.count +
         clamp(since, 0, length / this.count);
     this.playerProgress=playerProgress;
     if(this.networkRace){
-      if(this.checkpoint===0&&since>length-50)this.playerProgress=0;
+      if(this.route.closed&&this.checkpoint===0&&since>length-50)this.playerProgress=0;
       this.rankNetwork();
     }else this.position = 1 + this.progress.filter((v) => v > playerProgress).length;
   }

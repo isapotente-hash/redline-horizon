@@ -1,7 +1,7 @@
 import {makeVehicle} from './VehicleModels';
 import {CARS,chassisFor,isBike} from './CarCatalog';
 import * as T from "three";
-import { RoadNetwork, Road } from "../world/RoadNetwork";
+import { RoadNetwork, Road,roadHeight,surfaceBank } from "../world/RoadNetwork";
 import { PhysicsWorld, VehiclePhysics, R } from "../physics/VehiclePhysics";
 import { makeCar } from "./CarModel";
 import { clamp, damp, wrap } from "../core/math";
@@ -149,11 +149,13 @@ export class TrafficManager {
     if(c.turn){const f=clamp(c.turn.travel/c.turn.length,0,1);c.turn.curve.getPointAt(f,this.p);c.turn.curve.getTangentAt(f,this.tangent);}
     else {
       const a=this.roads.at(c.road,c.d),before=this.roads.at(c.road,c.d-1),after=this.roads.at(c.road,c.d+1);
-      this.p.copy(a.p).addScaledVector(a.r,c.lane);
-      this.tangent.copy(after.p).addScaledVector(after.r,c.lane).sub(before.p).addScaledVector(before.r,-c.lane).normalize().multiplyScalar(c.direction);
+      this.p.copy(a.p).addScaledVector(a.r,c.lane);this.p.y=roadHeight(a,c.lane);
+      this.tangent.copy(after.p).addScaledVector(after.r,c.lane).sub(before.p).addScaledVector(before.r,-c.lane);
+      this.tangent.y=roadHeight(after,c.lane)-roadHeight(before,c.lane);this.tangent.normalize().multiplyScalar(c.direction);
     }
     this.right.set(-this.tangent.z,0,this.tangent.x).normalize();this.up.crossVectors(this.right,this.tangent).normalize();this.back.copy(this.tangent).negate();
     this.matrix.makeBasis(this.right,this.up,this.back);c.root.quaternion.setFromRotationMatrix(this.matrix);c.root.position.copy(this.p);
+    if(!c.turn){const a=this.roads.at(c.road,c.d);c.root.rotateZ(surfaceBank(a)*c.direction);this.up.set(0,1,0).applyQuaternion(c.root.quaternion);}
     this.p.addScaledVector(this.up,c.bodyHeight);c.body.setNextKinematicTranslation(this.p);c.body.setNextKinematicRotation(c.root.quaternion);
     for(const w of c.wheels)if(w)w.rotation.x-=(c.speed*dt)/c.radius;
     c.brake.emissiveIntensity=c.speed<c.target-4?4:.6;

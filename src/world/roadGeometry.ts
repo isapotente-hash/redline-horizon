@@ -1,5 +1,5 @@
 import * as T from "three";
-import { Road } from "./RoadNetwork";
+import { Road,roadHeight } from "./RoadNetwork";
 export function roadRibbon(
   road: Road,
   start: number,
@@ -16,7 +16,7 @@ export function roadRibbon(
   for (let i = start; i <= end; i++) {
     const s = road.samples[i];
     for (const o of [left, right]) {
-      v.push(s.p.x + s.r.x * o, s.p.y + raise, s.p.z + s.r.z * o);
+      v.push(s.p.x + s.r.x * o, roadHeight(s,o) + raise, s.p.z + s.r.z * o);
       uv.push((o - left) / 6, s.d / 8);
     }
   }

@@ -1,5 +1,5 @@
 import * as T from "three";
-import { RoadNetwork, Road } from "./RoadNetwork";
+import { RoadNetwork, Road,roadHeight } from "./RoadNetwork";
 import { VehiclePhysics } from "../physics/VehiclePhysics";
 
 /** Small, non-solid pickups with simulation-time animation and cooldowns. */
@@ -24,7 +24,7 @@ export class BoostManager {
         // Alternate sides and lateral position so following one lane misses pickups.
         const offset = [-.28, .30, -.22, .24][ordinal++ % 4] * road.width;
         const position = sample.p.clone().addScaledVector(sample.r, offset);
-        position.y += 1.1;
+        position.y = roadHeight(sample,offset)+1.1;
         const mesh = new T.Group();
         mesh.add(new T.Mesh(coreGeometry, coreMaterial), new T.Mesh(haloGeometry, haloMaterial), new T.Mesh(ringGeometry, ringMaterial));
         mesh.position.copy(position);

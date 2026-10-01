@@ -1,3 +1,4 @@
+import {wallOpening} from "./RoadLandmarks";
 import {asphaltMaterial,dryFieldTexture,dryStoneMaterial} from '../rendering/RuralMaterials';
 import {DryGrass} from './DryGrass';
 import {RegionalScenery} from "./RegionalScenery";
@@ -10,7 +11,7 @@ import {TerrainSampler} from "./TerrainSampler";
 import {makeTreeVariants,treeWoodMaterial,treeFoliageMaterial} from "./TreeModel";
 import { roadRibbon } from "./roadGeometry";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { RoadNetwork, Road, Sample } from "./RoadNetwork";
+import { RoadNetwork, Road, Sample,roadHeight } from "./RoadNetwork";
 import { PhysicsWorld, R } from "../physics/VehiclePhysics";
 import { rng, smooth, lerp, fbm } from "../core/math";
 import { Settings } from "../core/SaveManager";
@@ -160,7 +161,7 @@ export class World {
             const sample=road.samples[i+Math.floor(v/2)],x=positions.getX(v),z=positions.getZ(v),offset=Math.hypot(x-sample.p.x,z-sample.p.z);
             if(offset>road.width/2+3){
               if(structureRange(this.network,road,sample.d,'bridge'))positions.setXYZ(v,sample.p.x+sample.r.x*side*(road.width/2+2.35),sample.p.y,sample.p.z+sample.r.z*side*(road.width/2+2.35));
-              else positions.setY(v,Math.min(sample.p.y-.05,this.terrainSampler.groundHeight(x,z)));
+              else positions.setY(v,Math.min(roadHeight(sample,side*(road.width/2+2.3))-.05,this.terrainSampler.groundHeight(x,z)));
             }
           }
           verge.computeVertexNormals();this.mesh(verge,this.vergeMaterial);
@@ -199,7 +200,7 @@ export class World {
           if(this.network.inJunction(a.p.x,a.p.z,8)||structureRange(this.network,road,a.d))continue;
           for(const side of [-1,1])for(let tuft=0;tuft<3;tuft++){
             const p=a.p.clone().addScaledVector(a.t,(tuft-1)*1.35).addScaledVector(a.r,side*(road.width/2+.91));
-            const grade=a.p.y+a.t.y*(tuft-1)*1.35;
+            const grade=roadHeight(a,side*(road.width/2+.91))+a.t.y*(tuft-1)*1.35;
             // Check other crossing roads as well as the local pavement edge.
             const hit=this.network.nearest(p.x,p.z);
             if(hit.distance<hit.road.width/2+.55)continue;
@@ -209,11 +210,11 @@ export class World {
           // Its cross-section is linear between the road grade and outer terrain edge.
           for(const side of [-1,1]){
             const outer=a.p.clone().addScaledVector(a.r,side*(road.width/2+14));
-            const edgeHeight=Math.min(a.p.y-.05,this.terrainSampler.groundHeight(outer.x,outer.z));
+            const innerHeight=roadHeight(a,side*(road.width/2+2.3)),edgeHeight=Math.min(innerHeight-.05,this.terrainSampler.groundHeight(outer.x,outer.z));
             for(const offset of [2.9,4.4,6.4]){
               const p=a.p.clone().addScaledVector(a.r,side*(road.width/2+offset)),hit=this.network.nearest(p.x,p.z);
               if(hit.distance<hit.road.width/2+.55)continue;
-              const height=lerp(a.p.y,edgeHeight,(offset-2.3)/11.7);
+              const height=lerp(innerHeight,edgeHeight,(offset-2.3)/11.7);
               this.dryGrass.plant(grass,p.x,height,p.z,random()*6.28,.8+random()*.5);
             }
           }
@@ -224,7 +225,7 @@ export class World {
         this.roadsGroup=oldGroup;yield;
       }
       // Continuous grade-following dry stone walls; junctions and tunnel portals stay open.
-      if(road===this.network.main||["SILVER CANYON","SUMMIT PASS","SUNSET EXPRESSWAY","SOUTH COAST"].includes(road.name)){
+      if(road===this.network.main||["SILVER CANYON","SUMMIT PASS","SUNSET EXPRESSWAY","SOUTH COAST","BRACKEN LANE","HIGHLAND SWITCHBACKS"].includes(road.name)){
         let first=-1;
         const flush=(end:number)=>{if(first<0||end<=first){first=-1;return;}for(const side of [-1,1]){
           const geometry=barrierGeometry(road,first,end,side),mesh=this.mesh(geometry,this.stoneMaterial);
@@ -233,7 +234,7 @@ export class World {
         }first=-1;};
         for(let i=0;i<n;i++){
           const a=road.samples[i],b=road.samples[i+1],middle=a.p.clone().lerp(b.p,.5),region=this.network.region(a.p.x,a.p.z);
-          const omit=this.network.inJunction(middle.x,middle.z,26)||!!structureRange(this.network,road,a.d,'tunnel')||['NOVA CITY','CEDAR SUBURBS','ZENITH INDUSTRIAL'].includes(region);
+          const omit=wallOpening(road,a.d)||this.network.inJunction(middle.x,middle.z,26)||!!structureRange(this.network,road,a.d,'tunnel')||['NOVA CITY','CEDAR SUBURBS','ZENITH INDUSTRIAL'].includes(region);
           if(omit)flush(i);else{if(first<0)first=i;if(i-first>=80){flush(i);first=i;}}
         }flush(n);
       }
@@ -309,7 +310,7 @@ export class World {
       }
     }
     treeBatches.forEach((b,i)=>{b.foliage.count=b.wood.count=counts[i];b.nearFoliage.count=b.nearWood.count=0;b.nearFoliage.visible=b.nearWood.visible=false;for(const mesh of [b.foliage,b.wood,b.nearFoliage,b.nearWood])mesh.castShadow=mesh.receiveShadow=true;group.add(b.foliage,b.wood,b.nearFoliage,b.nearWood)});
-    rocks.count=nr;rocks.castShadow=rocks.receiveShadow=true;group.add(rocks,this.regional.build(x,z,obstacles));this.root.add(group);
+    rocks.count=nr;rocks.castShadow=rocks.receiveShadow=true;group.add(rocks,yield* this.regional.buildSteps(x,z,obstacles));this.root.add(group);
     const chunk:Chunk={group,geometry:g,x,z,treeBatches,treeLod:1,grass,obstacles,obstacleColliders:[]};this.chunks.set(`${x},${z}`,chunk);return chunk;
   }
   update(p: T.Vector3, force = false, view=p) {

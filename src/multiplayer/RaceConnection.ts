@@ -1,3 +1,5 @@
+import {CARS,carSpec} from "../vehicles/CarCatalog";
+import {RaceSettings,defaultRaceSettings,validRaceSettings,matchesClass} from "./LobbySettings";
 import { PROTOCOL, ROOM_PREFIX, normalizeCode, validCode, roomCode, validPose, Pose, MAX_PLAYERS, validRoster, validSlot } from './Protocol';
 
 type Handler = (...args: any[]) => void;
@@ -34,18 +36,40 @@ export function loadPeerJS(): Promise<PeerFactory> {
 
 
 type Member = {link:DataLink; slot:number; ready:boolean; seen:number; deadline:number; seq:number; clock:boolean; latency:number};
-type Proposal = {id:string; laps:number; expires:number; slots:number[]; ready:Set<number>};
+type Proposal = {id:string; settings:RaceSettings; laps:number; expires:number; slots:number[]; ready:Set<number>};
 
 /** Host-relayed star: up to four guests, no separate gameplay server. */
 export class RaceConnection {
   host=false; code=''; connected=false; busy=false;
   ghost=true;
+  raceSettings=defaultRaceSettings();private racePreference=defaultRaceSettings();settingsVersion=0;localCar="vanta";
+  drivers=new Map<number,{ready:boolean;car:string}>([[0,{ready:true,car:"vanta"}]]);
+  get raceReady(){return this.ready&&this.players.every(slot=>{const d=this.drivers.get(slot);return d?.ready&&matchesClass(carSpec(d.car),this.raceSettings.vehicleClass);});}
+  get localReady(){return this.drivers.get(this.slot)?.ready??true;}
+  prepareRace:(settings:RaceSettings)=>boolean|Promise<boolean>=()=>true;
+  canRace:(settings:RaceSettings)=>boolean=()=>true;
+  setCar(id:string){if(!CARS.some(c=>c.id===id))return;this.localCar=id;if(this.connected)this.setReady(false);}
+  setReady(ready:boolean){
+    if(!this.connected||this.pendingRace||this.raceLocked)return false;
+    const accepted=ready&&this.canStart()&&matchesClass(carSpec(this.localCar),this.raceSettings.vehicleClass);
+    this.drivers.set(this.slot,{ready:accepted,car:this.localCar});
+    if(this.host)this.publishLobby();else {const m=this.members.values().next().value;if(m)this.transmit(m,{t:"lobby-ready",ready:accepted,car:this.localCar});}
+    this.onChange();return accepted===ready;
+  }
+  setRaceSettings(settings:RaceSettings){
+    if(!validRaceSettings(settings)||(this.code&&!this.host)||this.busy||this.pendingRace||this.raceLocked)return false;
+    this.raceSettings=this.racePreference={...settings};this.settingsVersion++;
+    for(const d of this.drivers.values())d.ready=false;
+    if(this.host&&this.code){this.broadcast({t:"room-settings",ghost:this.ghost,settings:this.raceSettings,version:this.settingsVersion});this.publishLobby();}
+    this.onChange();return true;
+  }
+  private publishLobby(){this.broadcast({t:"lobby",drivers:this.players.map(slot=>({slot,...this.drivers.get(slot)}))});this.onChange();}
   private ghostPreference=true;
   /** Only the room host may change the shared contact rule. */
   setGhost(value:boolean) {
-    if(typeof value!=='boolean'||(this.code&&!this.host)||this.busy||this.pendingRace)return false;
+    if(typeof value!=='boolean'||(this.code&&!this.host)||this.busy||this.pendingRace||this.raceLocked)return false;
     this.ghost=this.ghostPreference=value;
-    if(this.host&&this.code)this.broadcast({t:'room-settings',ghost:value});
+    if(this.host&&this.code)this.broadcast({t:'room-settings',ghost:value,settings:this.raceSettings,version:this.settingsVersion});
     this.onChange();return true;
   }
   status='';
@@ -56,7 +80,7 @@ export class RaceConnection {
   onDisconnected:()=>void=()=>{};
   onRoster:(slots:number[])=>void=()=>{};
   onPose:(pose:Pose,slot:number)=>void=()=>{};
-  onStart:(id:string,startAt:number,laps:number)=>void=()=>{};
+  onStart:(id:string,startAt:number,laps:number,settings:RaceSettings)=>void=()=>{};
   canStart:()=>boolean=()=>true;
   private peer?:PeerClient;
   private members=new Map<DataLink,Member>();
@@ -73,7 +97,7 @@ export class RaceConnection {
   async open(host:boolean,rawCode=''){
     const code=normalizeCode(rawCode);
     if(!host&&!validCode(code)){this.change('Enter exactly four letters, A–Z.');return;}
-    this.leave(false);this.ghost=host?this.ghostPreference:true;this.host=host;this.slot=host?0:-1;this.code=host?'':code;this.busy=true;
+    this.leave(false);this.raceSettings=host?{...this.racePreference}:defaultRaceSettings();this.settingsVersion=JSON.stringify(this.raceSettings)===JSON.stringify(defaultRaceSettings())?0:1;this.ghost=host?this.ghostPreference:true;this.host=host;this.slot=host?0:-1;this.code=host?'':code;this.busy=true;
     const epoch=this.epoch;this.change('Loading multiplayer…');
     try{
       const Peer=await this.loader();if(epoch!==this.epoch)return;
@@ -136,7 +160,7 @@ export class RaceConnection {
         m.ready=true;m.deadline=0;m.seen=this.now();this.deadline=0;this.busy=false;
         if(this.host){
           this.transmit(m,{t:'welcome',slot:m.slot});
-          this.transmit(m,{t:'room-settings',ghost:this.ghost});
+          this.transmit(m,{t:'room-settings',ghost:this.ghost,settings:this.raceSettings,version:this.settingsVersion});
           this.updateHostRoster();
         }
         this.transmit(m,{t:'ping',at:this.now()});
@@ -149,9 +173,20 @@ export class RaceConnection {
       this.applyRoster(data.slots);return;
     }
     if(!this.host&&data.t==='room-settings'&&typeof data.ghost==='boolean'){
-      this.ghost=data.ghost;this.onChange();return;
+      this.ghost=data.ghost;
+      if(validRaceSettings(data.settings)&&Number.isSafeInteger(data.version)&&data.version>=this.settingsVersion){
+        const changed=data.version>this.settingsVersion;this.raceSettings={...data.settings};this.settingsVersion=data.version;
+        if(changed)this.setReady(false);
+      }
+      this.onChange();return;
     }
-    if(data.t==='ping'&&Number.isFinite(data.at)){
+    if(this.host&&data.t==='lobby-ready'&&typeof data.ready==='boolean'&&CARS.some(c=>c.id===data.car)&&!this.pendingRace&&!this.raceLocked){
+      this.drivers.set(m.slot,{ready:data.ready&&matchesClass(carSpec(data.car),this.raceSettings.vehicleClass),car:data.car});this.publishLobby();return;
+    }
+    if(!this.host&&data.t==='lobby'&&Array.isArray(data.drivers)&&data.drivers.length===this.players.length&&new Set(data.drivers.map((d:any)=>d.slot)).size===this.players.length&&data.drivers.every((d:any)=>this.players.includes(d.slot)&&typeof d.ready==='boolean'&&CARS.some(c=>c.id===d.car))){
+      this.drivers.clear();for(const d of data.drivers)this.drivers.set(d.slot,{ready:d.ready,car:d.car});this.onChange();return;
+    }
+    if(data.t==='ping' &&Number.isFinite(data.at)){
       m.seen=this.now();this.transmit(m,{t:'pong',at:data.at,now:this.now()});return;
     }
     if(data.t==='pong'&&Number.isFinite(data.at)&&Number.isFinite(data.now)){
@@ -171,19 +206,13 @@ export class RaceConnection {
       m.seen=this.now();this.lastSeq.set(data.slot,data.pose.seq);this.acceptPose(data.pose,data.slot);return;
     }
     if(!this.host&&data.t==='prepare'&&this.validRace(data)&&validRoster(data.slots)&&data.slots.includes(this.slot)){
-      if(this.pendingRace||!this.canStart()||!this.ready){this.transmit(m,{t:'not-ready',id:data.id});return;}
-      this.proposal={id:data.id,laps:data.laps,expires:this.now()+12000,slots:data.slots,ready:new Set()};
-      this.pendingRace=true;this.transmit(m,{t:'ready',id:data.id});this.change('Waiting for all drivers…');return;
+      if(this.pendingRace||!this.canStart()||!this.canRace(data.settings)||!this.localReady||!this.ready){this.transmit(m,{t:'not-ready',id:data.id});return;}
+      this.proposal={id:data.id,settings:{...data.settings},laps:data.laps,expires:this.now()+45000,slots:data.slots,ready:new Set()};
+      this.pendingRace=true;this.change('Loading race route…');this.prepare(this.proposal,m);return;
     }
     if(this.host&&data.t==='not-ready'&&data.id===this.proposal?.id){this.cancelStart('A driver is not ready. Finish any police pursuit and try again.');return;}
     if(this.host&&data.t==='ready'&&data.id===this.proposal?.id){
-      const p=this.proposal!;p.ready.add(m.slot);
-      if(p.slots.every(slot=>p.ready.has(slot))){
-        if(!this.canStart()){this.cancelStart('Finish the police pursuit before starting.');return;}
-        const at=this.now()+4000;
-        if(this.broadcast({t:'start',id:p.id,laps:p.laps,at,slots:p.slots}))this.start(p.id,at,p.laps,p.slots);
-        else this.cancelStart('A driver lost connection. Please try again.');
-      }
+      this.proposal!.ready.add(m.slot);this.commitProposal();
       return;
     }
     if(!this.host&&data.t==='cancel-start'&&data.id===this.proposal?.id){this.proposal=undefined;this.pendingRace=false;this.change('Race start canceled. The host can try again.');return;}
@@ -191,7 +220,7 @@ export class RaceConnection {
       if(!this.canStart()){this.fail('Race canceled: finish the police pursuit before joining again.');return;}
       const local=data.at-this.clockOffset;
       if(local<this.now()-2000||local>this.now()+10000)return;
-      this.start(data.id,local,data.laps,data.slots);
+      this.start(data.id,local,data.laps,data.slots,data.settings);
     }
   }
   private acceptPose(pose:Pose,slot:number){
@@ -205,30 +234,49 @@ export class RaceConnection {
   }
   private updateHostRoster(){
     const slots=[0,...Array.from(this.members.values()).filter(m=>m.ready).map(m=>m.slot)].sort((a,b)=>a-b);
-    this.applyRoster(slots);this.broadcast({t:'roster',slots});this.checkFinished();
+    this.applyRoster(slots);this.broadcast({t:'roster',slots});this.publishLobby();this.checkFinished();
     if(slots.length<2){this.raceLocked=false;this.session='';this.racers=[];}
   }
   private applyRoster(slots:number[]){
     const before=this.connected;
     for(const old of this.players)if(!slots.includes(old))this.lastSeq.delete(old);
-    this.players=[...slots];this.connected=this.host?slots.length>1:slots.includes(this.slot)&&this.slot>0;
+    this.players=[...slots];
+    for(const slot of slots)if(!this.drivers.has(slot))this.drivers.set(slot,{ready:true,car:slot===this.slot?this.localCar:"vanta"});
+    for(const slot of this.drivers.keys())if(!slots.includes(slot))this.drivers.delete(slot);this.connected=this.host?slots.length>1:slots.includes(this.slot)&&this.slot>0;
     this.onRoster(this.players);
-    if(!before&&this.connected)this.onConnected();
+    if(!before&&this.connected){this.onConnected();if(!this.host)this.setReady(true);}
     if(before&&!this.connected)this.onDisconnected();
     this.change(this.connected?`Connected · ${slots.length}/5 drivers in the room.`:'Waiting for players.');
   }
-  private validRace(data:any){return typeof data.id==='string'&&/^[A-Za-z0-9-]{1,64}$/.test(data.id)&&(data.laps===1||data.laps===3);}
+  private validRace(data:any){return typeof data.id==='string'&&/^[A-Za-z0-9-]{1,64}$/.test(data.id)&&(data.laps===1||data.laps===3)&&validRaceSettings(data.settings)&&data.settings.laps===data.laps;}
   requestRace(laps:number){
-    if(!this.host||!this.ready||this.pendingRace||!this.canStart())return;
+    if(!this.host||!this.raceReady||this.raceLocked||this.pendingRace||!this.canStart())return;
     const id=`${this.code}-${this.now()}-${++this.startSerial}`;
-    this.proposal={id,laps:laps===3?3:1,expires:this.now()+12000,slots:[...this.players],ready:new Set([0])};
+    const settings={...this.raceSettings,laps:(this.raceSettings.route==="horizon"&&laps===3?3:1) as 1|3};if(!this.canRace(settings))return;
+    this.proposal={id,settings,laps:settings.laps,expires:this.now()+45000,slots:[...this.players],ready:new Set()};
     this.pendingRace=true;
-    this.broadcast({t:'prepare',id,laps:this.proposal.laps,slots:this.proposal.slots});
-    this.change('Waiting for every driver to be ready…');
+    this.broadcast({t:'prepare',id,laps:this.proposal.laps,settings,slots:this.proposal.slots});
+    this.change('Loading race route for all drivers…');this.prepare(this.proposal);
   }
-  private start(id:string,at:number,laps:number,slots:number[]){
+  private prepare(p:Proposal,member?:Member){
+    const epoch=this.epoch;
+    const complete=(ok:boolean)=>{
+      if(epoch!==this.epoch||this.proposal!==p)return;
+      if(!ok||!this.canStart()||!this.canRace(p.settings)){if(member)this.transmit(member,{t:'not-ready',id:p.id});else this.cancelStart('Race preparation failed. Check the vehicle class and try again.');return;}
+      if(member)this.transmit(member,{t:'ready',id:p.id});else {p.ready.add(0);this.commitProposal();}
+    };
+    try{const result=this.prepareRace(p.settings);if(typeof result==='boolean')complete(result);else void result.then(complete,()=>complete(false));}catch{complete(false);}
+  }
+  private commitProposal(){
+    const p=this.proposal;if(!p||!p.slots.every(slot=>p.ready.has(slot)))return;
+    if(!this.canStart()){this.cancelStart('Finish the police pursuit before starting.');return;}
+    const at=this.now()+4000;
+    if(this.broadcast({t:'start',id:p.id,laps:p.laps,settings:p.settings,at,slots:p.slots}))this.start(p.id,at,p.laps,p.slots,p.settings);
+    else this.cancelStart('A driver lost connection. Please try again.');
+  }
+  private start(id:string,at:number,laps:number,slots:number[],settings:RaceSettings){
     this.session=id;this.racers=[...slots];this.finishedSlots.clear();this.raceLocked=true;this.proposal=undefined;this.pendingRace=false;
-    this.change(`Connected · ${slots.length}-player race · ${this.ghost?'ghost mode':'player contact on'}.`);this.onStart(id,at,laps);
+    this.change(`Connected · ${slots.length}-player race · ${this.ghost?'ghost mode':'player contact on'}.`);this.onStart(id,at,laps,settings);
   }
   private cancelStart(message:string){
     const id=this.proposal?.id;this.proposal=undefined;this.pendingRace=false;
@@ -273,7 +321,7 @@ export class RaceConnection {
     const hadConnection=this.connected;this.epoch++;clearInterval(this.timer);this.timer=undefined;
     const members=Array.from(this.members.values()),peer=this.peer;this.members.clear();this.peer=undefined;
     this.connected=false;this.busy=false;this.ghost=true;this.host=false;this.code='';this.session='';this.pendingRace=false;this.raceLocked=false;
-    this.proposal=undefined;this.players=[0];this.racers=[];this.slot=0;this.finishedSlots.clear();this.lastSeq.clear();
+    this.proposal=undefined;this.settingsVersion=0;this.raceSettings=defaultRaceSettings();this.drivers.clear();this.drivers.set(0,{ready:true,car:this.localCar});this.players=[0];this.racers=[];this.slot=0;this.finishedSlots.clear();this.lastSeq.clear();
     this.clockReady=false;this.clockOffset=0;this.latency=0;this.deadline=0;
     for(const m of members)try{m.link.close();}catch{}try{peer?.destroy();}catch{}
     this.onRoster(this.players);if(hadConnection)this.onDisconnected();
