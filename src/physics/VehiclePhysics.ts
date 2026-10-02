@@ -92,6 +92,11 @@ export class VehiclePhysics {
     }
   }
   tune:HandlingTune={...BASE_TUNE};
+  /** Same road tyre coefficient used by the controller and optional corner warning. */
+  get roadGrip() {
+    const wet=wetness(this.settings);
+    return lerp(2.8,1.65,wet)*this.spec.handling*lerp(this.tune.dry,this.tune.wet*this.traits.wet,wet);
+  }
   teleportSerial=0;
   setup:DriverSetup=validateSetup(null);
   applyLoadout(loadout:Loadout,setup?:DriverSetup) {
@@ -284,9 +289,7 @@ export class VehiclePhysics {
       ? this.surface === "GRAVEL"
         ? 1.05
         : 0.75
-      : this.settings.weather === "rain"
-        ? lerp(2.8,1.65,wetness(this.settings))
-        : 2.8;
+      : this.roadGrip;
     this.reverse =
       !input.handbrake &&
       input.brake > 0.1 &&
@@ -316,7 +319,7 @@ export class VehiclePhysics {
     force *= this.spec.power * this.tune.enginePower * this.chassis.forceScale;
     if(off && this.spec.kit==='pickup')grip*=1.65;
     if(off && this.spec.kit==='sportbike')grip*=.82;
-    grip *= this.spec.handling * (off?this.tune.loose*this.traits.loose:this.settings.weather==="rain"?lerp(this.tune.dry,this.tune.wet*this.traits.wet,wetness(this.settings)):this.tune.dry);
+    if(off)grip *= this.spec.handling*this.tune.loose*this.traits.loose;
     if (this.shiftTimer > 0) force *= 0.12;
     if (this.settings.traction)
       force *= 1 - clamp((Math.abs(this.slip) - 0.12) * 1.5, 0, 0.75);
