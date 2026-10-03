@@ -320,7 +320,7 @@ export class Game {
       0.6,
       0.96,
     );
-    if (changed === "quality") this.render.applyQuality();
+    if (changed === "quality" || changed === "adaptiveResolution") this.render.applyQuality();
     if(changed==="renderDistance"||changed==="simulationDistance")this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);
     this.ui.sync();
   }

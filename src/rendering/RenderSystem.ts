@@ -21,6 +21,7 @@ export class RenderSystem {
   pmrem?: T.PMREMGenerator;
   reflectionEnv?: T.WebGLRenderTarget;
   fxaa?: ShaderPass;
+  grade?: ShaderPass;
   sky = new Sky();
   sun = new T.DirectionalLight("#ffe2c1", 3.2);
   hemi = new T.HemisphereLight("#b9d5e5", "#676045", 1.75);
@@ -34,14 +35,38 @@ export class RenderSystem {
   private resolutionClock=0;
   private frameAverage=1/60;
   private basePixelRatio=1;
+  private effectsReduced=false;
+  private recoveryClock=0;
+  private applyEffects(){
+    const enabled=["high","ultra"].includes(this.settings.quality)&&!this.effectsReduced;
+    if(this.ao)this.ao.enabled=enabled;
+    if(this.bloom)this.bloom.enabled=enabled;
+  }
+  private updateClarity(){
+    if(!this.renderer||!this.grade)return;
+    const ratio=this.renderer.getPixelRatio();
+    this.grade.uniforms.texel.value.set(1/(innerWidth*ratio),1/(innerHeight*ratio));
+    this.grade.uniforms.sharpness.value=clamp(.12+(1-ratio)*.3,.06,.22);
+  }
   adaptResolution(dt:number,driving:boolean){
     if(!this.renderer||!driving||dt<=0||dt>.25||document.hidden)return;
     this.frameAverage+=(dt-this.frameAverage)*.035;this.resolutionClock+=dt;
     if(this.resolutionClock<2)return;this.resolutionClock=0;
     let scale=this.resolutionScale;
-    if(!this.settings.adaptiveResolution)scale=1;
-    else if(this.frameAverage>1/48)scale=Math.max(.65,scale-.1);
-    else if(this.frameAverage<1/58)scale=Math.min(1,scale+.05);
+    if(!this.settings.adaptiveResolution){scale=1;this.effectsReduced=false;this.recoveryClock=0;this.applyEffects();}
+    else if(this.frameAverage>1/48){
+      this.recoveryClock=0;
+      // Save the expensive effects before sacrificing readability of the scene.
+      if(!this.effectsReduced&&["high","ultra"].includes(this.settings.quality)){
+        this.effectsReduced=true;this.applyEffects();this.resize();return;
+      }
+      const minimum=this.settings.quality==='very-low'?this.basePixelRatio*.85:Math.min(this.basePixelRatio,Math.max(.85,this.basePixelRatio*.7));
+      scale=Math.max(minimum/this.basePixelRatio,scale-.05);
+    }
+    else if(this.frameAverage<1/58){
+      if(scale<1){scale=Math.min(1,scale+.05);this.recoveryClock=0;}
+      else if(this.effectsReduced){this.recoveryClock+=2;if(this.recoveryClock>=6){this.effectsReduced=false;this.recoveryClock=0;this.applyEffects();this.resize();}}
+    }else this.recoveryClock=0;
     if(Math.abs(scale-this.resolutionScale)<.01)return;
     this.resolutionScale=scale;this.renderer.setPixelRatio(this.basePixelRatio*scale);this.composer?.setPixelRatio(this.renderer.getPixelRatio());this.resize();
   }
@@ -138,12 +163,22 @@ export class RenderSystem {
       this.ao.minDistance=.0002;
       this.ao.maxDistance=.015;
       this.composer.addPass(this.ao);
-      this.bloom = new UnrealBloomPass(new T.Vector2(1, 1), 0.22, 0.45, 1.35);
+      this.bloom = new UnrealBloomPass(new T.Vector2(1, 1), 0.12, 0.35, 1.7);
       this.composer.addPass(this.bloom);
-      this.composer.addPass(new ShaderPass({uniforms:{tDiffuse:{value:null}},
+      this.grade=new ShaderPass({uniforms:{tDiffuse:{value:null},texel:{value:new T.Vector2()},sharpness:{value:.12}},
         vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-        fragmentShader:`uniform sampler2D tDiffuse;varying vec2 vUv;void main(){vec4 c=texture2D(tDiffuse,vUv);float l=dot(c.rgb,vec3(.2126,.7152,.0722));c.rgb=mix(vec3(l),c.rgb,1.055);vec2 p=vUv-.5;c.rgb*=1.-dot(p,p)*.12;gl_FragColor=vec4(max(c.rgb,vec3(0.)),c.a);}`
-      }));
+        fragmentShader:`uniform sampler2D tDiffuse;uniform vec2 texel;uniform float sharpness;varying vec2 vUv;
+        void main(){
+          vec4 c=texture2D(tDiffuse,vUv);
+          vec3 n=texture2D(tDiffuse,vUv+vec2(0.,texel.y)).rgb,s=texture2D(tDiffuse,vUv-vec2(0.,texel.y)).rgb;
+          vec3 e=texture2D(tDiffuse,vUv+vec2(texel.x,0.)).rgb,w=texture2D(tDiffuse,vUv-vec2(texel.x,0.)).rgb;
+          vec3 lo=min(c.rgb,min(min(n,s),min(e,w))),hi=max(c.rgb,max(max(n,s),max(e,w)));
+          c.rgb=clamp(c.rgb+(c.rgb-(n+s+e+w)*.25)*sharpness,lo,hi);
+          float l=dot(c.rgb,vec3(.2126,.7152,.0722));c.rgb=mix(vec3(l),c.rgb,1.055);
+          vec2 p=vUv-.5;c.rgb*=1.-dot(p,p)*.12;gl_FragColor=vec4(max(c.rgb,vec3(0.)),c.a);
+        }`
+      });
+      this.composer.addPass(this.grade);
       this.composer.addPass(new OutputPass());
       this.fxaa = new ShaderPass(FXAAShader);
       this.composer.addPass(this.fxaa);
@@ -173,18 +208,19 @@ export class RenderSystem {
     this.renderer.setPixelRatio(
       Math.min(
         devicePixelRatio,
-        { 'very-low': 0.5, low: 0.8, medium: 1, high: 1.5, ultra: 2 }[this.settings.quality],
+        { 'very-low': 0.5, low: 1, medium: 1, high: 1.5, ultra: 2 }[this.settings.quality],
       ),
     );
     this.basePixelRatio=this.renderer.getPixelRatio();this.resolutionScale=1;
-    if (this.ao) this.ao.enabled = ["high", "ultra"].includes(this.settings.quality);
+    this.effectsReduced=false;this.recoveryClock=0;this.resolutionClock=0;this.frameAverage=1/60;
+    this.applyEffects();
     if (this.composer) {
       this.composer.setPixelRatio(this.renderer.getPixelRatio());
-      const samples=["high","ultra"].includes(this.settings.quality)?Math.min(4,this.renderer.capabilities.maxSamples):0;
+      const samples=this.settings.quality==='medium'?Math.min(2,this.renderer.capabilities.maxSamples):["high","ultra"].includes(this.settings.quality)?Math.min(4,this.renderer.capabilities.maxSamples):0;
       for(const target of [this.composer.renderTarget1,this.composer.renderTarget2]) {target.samples=samples;target.dispose();}
+      // Hardware antialiasing already resolves edges; stacking FXAA softens them.
+      if(this.fxaa)this.fxaa.enabled=samples===0;
     }
-    if (this.bloom)
-      this.bloom.enabled = ["high", "ultra"].includes(this.settings.quality);
     this.resize();
   }
   resize() {
@@ -202,6 +238,7 @@ export class RenderSystem {
         1 / (h * p),
       );
     }
+    this.updateClarity();
   }
   updateAtmosphere(t: number, p: T.Vector3) {
     const h = this.settings.hour,
@@ -261,7 +298,7 @@ export class RenderSystem {
     if (!this.renderer) return;
     this.renderer.toneMappingExposure = this.exposure;
     if (
-      stationary && this.probe &&
+      stationary && !this.effectsReduced && this.probe &&
       this.frame++ % (this.settings.quality === "ultra" ? 120 : 240) === 0 &&
       ["high", "ultra"].includes(this.settings.quality)
     ) {
