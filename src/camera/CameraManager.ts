@@ -16,6 +16,7 @@ function spring(p:T.Vector3,target:T.Vector3,v:T.Vector3,dt:number){
 /** Runs once per render, after physics and visual interpolation. Never tracks raw body translation. */
 export class CameraManager {
   onFoot=false;
+  private footInputEnabled=true;
   mode=0; orbitYaw=.6; orbitPitch=.21; distance=8.5; photoFov=50; roll=0;
   drag=false; lastX=0; lastY=0;
   target=new T.Vector3(); freePosition=new T.Vector3(); freeYaw=0; freePitch=0; photo=false;
@@ -38,12 +39,24 @@ export class CameraManager {
   private lastBoost=-1;private lastCrash=-1;
   private readonly ray=new R.Ray(this.from,this.direction);
   private readonly events=new AbortController();
-  constructor(public camera:T.PerspectiveCamera, canvas:HTMLCanvasElement) {
+  constructor(public camera:T.PerspectiveCamera, private canvas:HTMLCanvasElement, private mobile=false) {
     const signal=this.events.signal;
     canvas.addEventListener('pointerdown',e=>{
-      if(this.onFoot||this.photo||this.mode>=5){this.drag=true;this.lastX=e.clientX;this.lastY=e.clientY;canvas.setPointerCapture(e.pointerId);}
+      if(this.onFoot){
+        if(!this.footInputEnabled||this.mobile||e.pointerType==='touch'||e.button!==0)return;
+      }
+      if(this.onFoot||this.photo||this.mode>=5){
+        this.drag=true;this.lastX=e.clientX;this.lastY=e.clientY;
+        // Pointer capture must precede lock: browsers reject capture while locked.
+        if(!this.onFoot||typeof document==='undefined'||document.pointerLockElement!==canvas)canvas.setPointerCapture(e.pointerId);
+      }
+      if(this.onFoot){try {const request=canvas.requestPointerLock?.();request?.catch(()=>{});}catch{}}
     },{signal});
     canvas.addEventListener('pointermove',e=>{
+      if(this.onFoot){
+        if(!this.footInputEnabled||this.mobile)return;
+        if(typeof document!=='undefined'&&document.pointerLockElement===canvas){this.lookFoot(e.movementX,e.movementY);return;}
+      }
       if(!this.drag)return;
       this.orbitYaw-=(e.clientX-this.lastX)*.006;
       this.orbitPitch=clamp(this.orbitPitch+(e.clientY-this.lastY)*.004,-.15,1.35);
@@ -54,7 +67,15 @@ export class CameraManager {
       if(this.onFoot||this.photo||this.mode>=5){this.distance=clamp(this.distance+e.deltaY*.01,2.5,40);e.preventDefault();}
     },{passive:false,signal});
   }
-  dispose(){this.events.abort();this.drag=false;}
+  dispose(){this.setFootInputEnabled(false);this.events.abort();this.drag=false;}
+  lookFoot(x:number,y:number){
+    if(!this.onFoot||!this.footInputEnabled)return;
+    this.orbitYaw-=x*.006;this.orbitPitch=clamp(this.orbitPitch+y*.004,-.15,1.35);
+  }
+  setFootInputEnabled(enabled:boolean){
+    this.footInputEnabled=enabled;
+    if(!enabled){this.drag=false;if(typeof document!=='undefined'&&document.pointerLockElement===this.canvas)document.exitPointerLock();}
+  }
   setMode(i:number){
     this.mode=((Math.trunc(i)%7)+7)%7;this.drag=false;
     if(this.mode===6){
@@ -76,9 +97,9 @@ export class CameraManager {
     if(hit){position.copy(this.from).addScaledVector(this.direction,Math.max(0,hit.timeOfImpact-.35));return true;}return false;
   }
   startFoot(visual:T.Object3D){
-    this.onFoot=true;this.following=false;this.orbitYaw=Math.atan2(this.camera.position.x-visual.position.x,this.camera.position.z-visual.position.z);this.orbitPitch=.25;this.distance=3.6;
+    this.onFoot=true;this.footInputEnabled=true;this.drag=false;this.following=false;this.orbitYaw=Math.atan2(this.camera.position.x-visual.position.x,this.camera.position.z-visual.position.z);this.orbitPitch=.25;this.distance=3.6;
   }
-  stopFoot(){this.onFoot=false;this.following=false;this.setMode(0);}
+  stopFoot(){this.setFootInputEnabled(false);this.onFoot=false;this.following=false;this.setMode(0);}
   updateFoot(dt:number,visual:T.Object3D,car:VehiclePhysics){
     this.camera.position.sub(this.shakeOffset);this.shakeOffset.set(0,0,0);this.shakePulse=0;
     const p=visual.position,instant=!this.following;

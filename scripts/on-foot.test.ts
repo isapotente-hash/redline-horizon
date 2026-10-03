@@ -10,7 +10,7 @@ test('all vehicles exit onto solid ground, park without residual velocity and re
  const {physics,car,foot}=await fixture();const bodies=physics.world.bodies.len(),handle=foot.body.handle;
  for(const spec of CARS){car.spec=spec;car.setPosition(0,spec.kit==='pickup'?.7:.6,0,0);for(let i=0;i<90;i++){car.preStep(stopped,1/60);physics.world.step();car.postStep(1/60);}car.body.setLinvel({x:0,y:0,z:-50},true);car.speed=50;
   const parked=car.position.clone();assert.equal(foot.exit(car),true,spec.id);assert.equal(car.body.bodyType(),R.RigidBodyType.Fixed);assert.equal(car.body.linvel().z,0);assert.equal(car.speed,0);assert.ok(foot.position.y>.8&&foot.position.y<1);
-  for(let i=0;i<120;i++){foot.preStep(idle,0,1/60);physics.world.step();foot.postStep();}
+  for(let i=0;i<120;i++){foot.preStep({forward:0,right:0},0,1/60);physics.world.step();foot.postStep();}
   assert.ok(foot.position.y>.8);assert.ok(car.position.distanceTo(parked)<1e-8);assert.equal(foot.enter(car),true,spec.id+' enter');assert.equal(car.body.bodyType(),R.RigidBodyType.Dynamic);assert.equal(foot.body.isEnabled(),false);assert.equal(foot.body.handle,handle);assert.equal(physics.world.bodies.len(),bodies);
  }
  physics.world.free();
@@ -23,12 +23,12 @@ test('blocked exits and airborne exits are rejected without stopping the car; re
 });
 test('walking uses collision sweeps, blocks at walls and does not fall off unloaded ground',async()=>{
  const {physics,car,foot}=await fixture();assert.ok(foot.exit(car));physics.world.step();const x=foot.position.x;physics.box(x,1,-3,4,2,.25);physics.world.step();
- for(let i=0;i<180;i++){foot.preStep({...idle,throttle:1},0,1/60);physics.world.step();foot.postStep();}
+ for(let i=0;i<180;i++){foot.preStep({forward:1,right:0},0,1/60);physics.world.step();foot.postStep();}
  assert.ok(foot.position.z> -2.75,'capsule must not cross wall');assert.ok(foot.position.z< -1.5,'walk must respond');assert.ok(foot.position.y>.8);
- const before=foot.position.clone();for(let i=0;i<60;i++){foot.preStep({...idle,steer:-1},0,1/60);physics.world.step();foot.postStep();}assert.ok(foot.position.x>before.x+3);
+ const before=foot.position.clone();for(let i=0;i<60;i++){foot.preStep({forward:0,right:1},0,1/60);physics.world.step();foot.postStep();}assert.ok(foot.position.x>before.x+3);
  // Missing support must not permit continued horizontal motion or a fall through the map.
  foot.body.setTranslation({x:99.5,y:.9,z:10},true);foot.body.setNextKinematicTranslation({x:99.5,y:.9,z:10});foot.position.set(99.5,.9,10);physics.world.step();
- for(let i=0;i<120;i++){foot.preStep({...idle,steer:-1},0,1/60);physics.world.step();foot.postStep();}
+ for(let i=0;i<120;i++){foot.preStep({forward:0,right:1},0,1/60);physics.world.step();foot.postStep();}
  assert.ok(foot.position.x<=100);assert.ok(foot.position.y>.7);physics.world.free();
 });
 test('tight chase places the chassis below screen centre; foot camera orbits without breaking translation sync',async()=>{

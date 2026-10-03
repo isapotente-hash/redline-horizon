@@ -7,12 +7,16 @@ export type Controls = {
   up: boolean;
   down: boolean;
 };
+export type FootControls = { forward: number; right: number };
 export class InputManager {
   keys = new Set<string>();
   edges = new Set<string>();
   touch = new Set<string>();
   steer = 0;
   padName = "";
+  isDriving = true;
+  private footForward = 0;
+  private footRight = 0;
   private oldButtons: boolean[] = [];
   constructor() {
     addEventListener("keydown", (e) => {
@@ -46,8 +50,23 @@ export class InputManager {
   clear() {
     this.keys.clear();
     this.edges.clear();
-    this.touch.clear();
+    this.clearTouch();
     this.steer = 0;
+  }
+  clearTouch() {
+    this.touch.clear();
+    this.footForward = this.footRight = 0;
+  }
+  setMovementMode(isDriving: boolean) {
+    if (this.isDriving === isDriving) return;
+    this.isDriving = isDriving;
+    this.clearTouch();
+    this.steer = 0;
+  }
+  setFootMovement(forward: number, right: number) {
+    if (this.isDriving) return;
+    this.footForward = clamp(forward, -1, 1);
+    this.footRight = clamp(right, -1, 1);
   }
   take(k: string) {
     return this.edges.delete(k);
@@ -55,15 +74,23 @@ export class InputManager {
   held(...ks: string[]) {
     return ks.some((k) => this.keys.has(k) || this.touch.has(k));
   }
+  private keyboardHeld(...keys: string[]) {
+    return keys.some(key => this.keys.has(key));
+  }
   /** Camera keys never enter driving inputs or manual-assist override detection. */
   readCamera(): Controls {
     return {throttle:this.held("KeyI")?1:0,brake:this.held("KeyK")?1:0,steer:(this.held("KeyJ")?1:0)-(this.held("KeyL")?1:0),up:this.held("KeyO"),down:this.held("KeyU"),handbrake:false};
   }
-  readFoot():Controls {
-    return {throttle:this.held("KeyW","ArrowUp")?1:0,brake:this.held("KeyS","ArrowDown")?1:0,
-      steer:(this.held("KeyA","ArrowLeft")?1:0)-(this.held("KeyD","ArrowRight")?1:0),handbrake:false,up:false,down:false};
+  readFoot(): FootControls {
+    if (this.isDriving) return {forward: 0, right: 0};
+    // Walking has independent axes; vehicle touch buttons never contribute.
+    const forward = (this.keyboardHeld("KeyW", "ArrowUp") ? 1 : 0) - (this.keyboardHeld("KeyS", "ArrowDown") ? 1 : 0) + this.footForward;
+    const right = (this.keyboardHeld("KeyD", "ArrowRight") ? 1 : 0) - (this.keyboardHeld("KeyA", "ArrowLeft") ? 1 : 0) + this.footRight;
+    const length = Math.max(1, Math.hypot(forward, right));
+    return {forward: forward / length, right: right / length};
   }
   read(dt: number): Controls {
+    if (!this.isDriving) return {throttle: 0, brake: 0, steer: 0, handbrake: false, up: false, down: false};
     let steer =
         (this.held("KeyA", "ArrowLeft") ? 1 : 0) -
         (this.held("KeyD", "ArrowRight") ? 1 : 0),

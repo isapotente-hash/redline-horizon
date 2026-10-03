@@ -1,6 +1,6 @@
 import * as T from 'three';
 import {PhysicsWorld,VehiclePhysics,R} from '../physics/VehiclePhysics';
-import {Controls} from '../input/InputManager';
+import {FootControls} from '../input/InputManager';
 import {DriverAvatar} from './DriverAvatar';
 /** A single pooled character controller: enabled only while the car is parked. */
 export class OnFootPlayer {
@@ -74,9 +74,9 @@ export class OnFootPlayer {
     car.previousPosition.copy(car.position);car.previousRotation.copy(car.rotation);car.teleportSerial++;
     return true;
   }
-  preStep(input:Controls,yaw:number,dt:number){
+  preStep(input:FootControls,yaw:number,dt:number){
     this.previousPosition.copy(this.position);
-    const forward=input.throttle-input.brake,side=-input.steer,length=Math.max(1,Math.hypot(forward,side));
+    const forward=input.forward,side=input.right,length=Math.max(1,Math.hypot(forward,side));
     this.desired.set((-Math.sin(yaw)*forward+Math.cos(yaw)*side)*4.5*dt/length,0,(-Math.cos(yaw)*forward-Math.sin(yaw)*side)*4.5*dt/length);
     // Stop at an unloaded edge rather than walking into an absent terrain collider.
     this.origin.copy(this.position).add(this.desired);this.origin.y+=.3;

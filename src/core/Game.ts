@@ -8,6 +8,7 @@ import {RACE_ROUTES,PRACTICE_SECTIONS,RouteId,validRoute,routeRoad} from "../rac
 import {recoverVehicle} from "../vehicles/Recovery";
 import {matchesClass} from "../multiplayer/LobbySettings";
 import { OnFootPlayer } from "../player/OnFootPlayer";
+import { mobileDevice } from "../input/DevicePolicy";
 import {SlipstreamSystem} from '../vehicles/SlipstreamSystem';
 import { PhysicsClock } from "./PhysicsClock";
 import {yieldLoading,finishStartup,loadingProgress} from "./Loading";
@@ -207,7 +208,8 @@ export class Game {
         this.save.settings,
         this.uiCheck,
       );
-      this.camera = new CameraManager(this.render.camera, this.render.canvas);
+      this.camera = new CameraManager(this.render.camera, this.render.canvas, mobileDevice());
+      this.ui.onFootLook = (x, y) => this.camera.lookFoot(x, y);
       this.ui.loading("LOADING WORLD");
       await new Promise((r) => requestAnimationFrame(r));
       this.world = await new World(this.roads, this.physics, this.save.settings).init(f=>loadingProgress("world",f));
@@ -332,10 +334,12 @@ export class Game {
     this.state = state;
     if(state!=='drive'){this.slipstream.reset();if(this.vehicle)this.vehicle.slipstreamStrength=0;}
     if(state!=='drive')this.playerContacts?.clear();
+    if(this.foot)this.ui.footStatus(this.foot.active,this.foot.active&&this.foot.canEnter(this.vehicle));
     this.ui.setState(state);
     this.input.clear();
     this.physicsClock.reset();
     this.camera.photo = state === "photo";
+    this.camera.setFootInputEnabled(state === 'drive' && !!this.foot?.active);
     if (state !== "photo") {
       this.render.exposure = 0.95;
       this.camera.roll = 0;
@@ -909,6 +913,8 @@ export class Game {
               type: "text",
               text: JSON.stringify({
                 mode: this.state,
+                isDriving: !this.foot.active,
+                walkingPosition: this.foot.active ? {x:this.foot.position.x,y:this.foot.position.y,z:this.foot.position.z} : null,
                 statistics:this.save.statistics,routeChoice:this.autopilot.routes.choice?{distance:this.autopilot.routes.choice.distance,locked:this.autopilot.routes.choice.locked,selected:this.autopilot.routes.choice.selected,options:this.autopilot.routes.choice.options.map(o=>({label:o.label,road:o.road.name}))}:null,
                 speedKmh: Math.round(this.vehicle.speed * 3.6),
                 gear: this.vehicle.gear,
