@@ -179,7 +179,7 @@ export class TrafficManager {
   }
   update(dt: number, player: T.Vector3, quality: string, simulationDistance=1200, renderDistance=1600, view=player) {
     const count = this.active
-        ? Math.min(this.cars.length,{ low: 8, medium: 14, high: 20, ultra: 24 }[quality] || 14)
+        ? Math.min(this.cars.length,{ 'very-low': 4, low: 8, medium: 14, high: 20, ultra: 24 }[quality] || 14)
         : 0,
       nearest = this.roads.nearest(player.x, player.z);
     for (let i = 0; i < this.cars.length; i++) {

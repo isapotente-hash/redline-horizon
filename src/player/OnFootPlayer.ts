@@ -13,6 +13,7 @@ export class OnFootPlayer {
   readonly controller:InstanceType<typeof R.KinematicCharacterController>;
   readonly enterRadius=2.8;
   private velocityY=0;
+  private parkedBody?:InstanceType<typeof R.RigidBody>;
   private readonly desired=new T.Vector3();
   private readonly next=new T.Vector3();
   private readonly origin=new T.Vector3();
@@ -58,7 +59,7 @@ export class OnFootPlayer {
     this.body.setTranslation(this.next,true);this.body.setNextKinematicTranslation(this.next);this.body.setEnabled(true);
     this.position.copy(this.next);this.previousPosition.copy(this.next);this.root.position.copy(this.next);
     this.root.rotation.y=Math.atan2(-car.forward.x,-car.forward.z);
-    this.velocityY=0;this.active=true;this.root.visible=true;this.avatar?.onFoot(this.root);return true;
+    this.velocityY=0;this.parkedBody=car.body;this.active=true;this.root.visible=true;this.avatar?.onFoot(this.root);return true;
   }
   canEnter(car:VehiclePhysics){
     if(!this.active||this.position.distanceToSquared(car.position)>this.enterRadius*this.enterRadius)return false;
@@ -69,7 +70,7 @@ export class OnFootPlayer {
   }
   enter(car:VehiclePhysics,force=false){
     if(!this.active||(!force&&!this.canEnter(car)))return false;
-    this.active=false;this.root.visible=false;this.body.setEnabled(false);this.avatar?.returnToSeat();
+    this.active=false;this.parkedBody=undefined;this.root.visible=false;this.body.setEnabled(false);this.avatar?.returnToSeat();
     car.body.setBodyType(R.RigidBodyType.Dynamic,true);car.body.setLinvel({x:0,y:0,z:0},true);car.body.setAngvel({x:0,y:0,z:0},true);
     car.previousPosition.copy(car.position);car.previousRotation.copy(car.rotation);car.teleportSerial++;
     return true;
@@ -80,7 +81,7 @@ export class OnFootPlayer {
     this.desired.set((-Math.sin(yaw)*forward+Math.cos(yaw)*side)*4.5*dt/length,0,(-Math.cos(yaw)*forward-Math.sin(yaw)*side)*4.5*dt/length);
     // Stop at an unloaded edge rather than walking into an absent terrain collider.
     this.origin.copy(this.position).add(this.desired);this.origin.y+=.3;
-    if(!this.physics.world.castRay(this.ray,1.9,true,R.QueryFilterFlags.EXCLUDE_DYNAMIC|R.QueryFilterFlags.EXCLUDE_KINEMATIC|R.QueryFilterFlags.EXCLUDE_SENSORS))this.desired.x=this.desired.z=0;
+    if(!this.physics.world.castRay(this.ray,1.9,true,R.QueryFilterFlags.EXCLUDE_DYNAMIC|R.QueryFilterFlags.EXCLUDE_KINEMATIC|R.QueryFilterFlags.EXCLUDE_SENSORS,undefined,this.collider,this.parkedBody))this.desired.x=this.desired.z=0;
     this.velocityY=this.controller.computedGrounded()?-1:Math.max(-20,this.velocityY-9.81*dt);
     this.desired.y=this.velocityY*dt;
     this.controller.computeColliderMovement(this.collider,this.desired,R.QueryFilterFlags.EXCLUDE_SENSORS);

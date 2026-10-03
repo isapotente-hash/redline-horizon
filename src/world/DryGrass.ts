@@ -32,7 +32,7 @@ export class DryGrass {
       float dither=fract(dot(gl_FragCoord.xy,vec2(.75487766,.56984029)));if(dither>grassFade)discard;`);
     };
   }
-  update(settings:Settings){this.range.value={low:45,medium:65,high:85,ultra:110}[settings.quality];this.density={low:.4,medium:.65,high:1,ultra:1}[settings.quality];}
+  update(settings:Settings){this.range.value={'very-low':0,low:45,medium:65,high:85,ultra:110}[settings.quality];this.density={'very-low':0,low:.4,medium:.65,high:1,ultra:1}[settings.quality];}
   batch(capacity:number){const mesh=new T.InstancedMesh(this.geometry,this.material,capacity);mesh.name='Dry field grass';mesh.count=0;mesh.receiveShadow=true;mesh.userData.grass=true;return mesh;}
   plant(mesh:T.InstancedMesh,x:number,y:number,z:number,yaw:number,scale:number){
     this.dummy.position.set(x,y-.02,z);this.dummy.rotation.set(0,yaw,0);this.dummy.scale.set(scale,.75+scale*.3,scale);this.dummy.updateMatrix();mesh.setMatrixAt(mesh.count++,this.dummy.matrix);
@@ -57,6 +57,7 @@ export class DryGrass {
   }
   visible(mesh:T.InstancedMesh,p:T.Vector3){
     if(mesh.userData.fieldCount!==undefined)mesh.count=Math.floor(mesh.userData.fieldCount*this.density);
+    if(this.density===0)return false;
     const b=mesh.boundingSphere;if(!b)return false;return b.center.distanceToSquared(p)<(this.range.value+b.radius)**2;
   }
 }

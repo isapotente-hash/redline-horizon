@@ -29,7 +29,7 @@ type Chunk = {
   treeLod:number;
   grass:T.InstancedMesh;
   obstacles:SceneryObstacle[];
-  obstacleColliders:ReturnType<typeof sceneryCollider>[];
+  obstacleColliders:Map<SceneryObstacle,ReturnType<typeof sceneryCollider>>;
 };
 export class World {
   root = new T.Group();
@@ -116,13 +116,22 @@ export class World {
     this.buildCity();await yieldLoading();this.batchCity();await yieldLoading();this.buildSigns();progress(1);
     return this;
   }
-  get visualRadius(){return Math.max(2,Math.min(6,Math.ceil(({low:2,medium:3,high:3,ultra:4}[this.settings.quality])*this.settings.renderDistance/1600)));}
+  get visualRadius(){return Math.max(1,Math.min(6,Math.ceil(({'very-low':1,low:2,medium:3,high:3,ultra:4}[this.settings.quality])*this.settings.renderDistance/1600)));}
   get residentRadius(){return Math.max(this.visualRadius,Math.ceil(this.settings.simulationDistance/256));}
+  /** Distance to the tile surface, not its grid index: edges/corners remain walkable. */
+  private chunkDistance(p:T.Vector3,x:number,z:number){
+    return Math.hypot(Math.max(x*256-p.x,0,p.x-(x+1)*256),Math.max(z*256-p.z,0,p.z-(z+1)*256));
+  }
+  private obstacleDistance(p:T.Vector3,o:SceneryObstacle){
+    const e=o.matrix.elements;
+    const radius=o.kind==='tree'?.36*Math.hypot(e[0],e[2]):o.kind==='box'?Math.hypot(e[0],e[2],e[8],e[10])/2:2*Math.max(Math.hypot(e[0],e[1],e[2]),Math.hypot(e[4],e[5],e[6]),Math.hypot(e[8],e[9],e[10]));
+    return Math.max(0,Math.hypot(p.x-e[12],p.z-e[14])-radius);
+  }
   async prime(p:T.Vector3){
     await this.streaming;
     const radius=this.residentRadius,cx=Math.floor(p.x/256),cz=Math.floor(p.z/256);
     const tasks:{x:number;z:number;d:number}[]=[];
-    for(let z=cz-radius;z<=cz+radius;z++)for(let x=cx-radius;x<=cx+radius;x++){const d=Math.hypot(x-cx,z-cz);if(d<=radius+.2&&!this.chunks.has(`${x},${z}`))tasks.push({x,z,d});}
+    for(let z=cz-radius;z<=cz+radius;z++)for(let x=cx-radius;x<=cx+radius;x++){const d=Math.hypot(x-cx,z-cz);if((d<=radius+.2||this.chunkDistance(p,x,z)<=this.settings.simulationDistance+32)&&!this.chunks.has(`${x},${z}`))tasks.push({x,z,d});}
     tasks.sort((a,b)=>a.d-b.d);
     for(const a of tasks){await this.buildChunkAsync(a.x,a.z);await yieldLoading();}
     for(let i=0;i<45;i++){if(!this.buildFarTerrain(p))break;await yieldLoading();}
@@ -268,7 +277,7 @@ export class World {
   }
   terrain(x0:number,z0:number,size:number,n:number,lower=0){return this.terrainSampler.geometry(x0,z0,size,n,lower)}
   buildFarTerrain(p:T.Vector3) {
-    const size=1024,cx=Math.floor(p.x/size),cz=Math.floor(p.z/size),radius=Math.ceil(this.settings.renderDistance/1024)+1;
+    const size=1024,cx=Math.floor(p.x/size),cz=Math.floor(p.z/size),radius=this.settings.renderDistance<500?1:Math.ceil(this.settings.renderDistance/1024)+1;
     let nearest:{x:number;z:number;d:number}|undefined;
     for(let z=cz-radius;z<=cz+radius;z++)for(let x=cx-radius;x<=cx+radius;x++){
       const d=Math.hypot(x-cx,z-cz);if(d>radius+.2||this.farTiles.has(`${x},${z}`))continue;
@@ -313,7 +322,7 @@ export class World {
     }
     treeBatches.forEach((b,i)=>{b.foliage.count=b.wood.count=counts[i];b.nearFoliage.count=b.nearWood.count=0;b.nearFoliage.visible=b.nearWood.visible=false;for(const mesh of [b.foliage,b.wood,b.nearFoliage,b.nearWood])mesh.castShadow=mesh.receiveShadow=true;group.add(b.foliage,b.wood,b.nearFoliage,b.nearWood)});
     rocks.count=nr;rocks.castShadow=rocks.receiveShadow=true;group.add(rocks,yield* this.regional.buildSteps(x,z,obstacles));this.root.add(group);
-    const chunk:Chunk={group,geometry:g,x,z,treeBatches,treeLod:1,grass,obstacles,obstacleColliders:[]};this.chunks.set(`${x},${z}`,chunk);return chunk;
+    const chunk:Chunk={group,geometry:g,x,z,treeBatches,treeLod:1,grass,obstacles,obstacleColliders:new Map()};this.chunks.set(`${x},${z}`,chunk);return chunk;
   }
   update(p: T.Vector3, force = false, view=p) {
     const now=performance.now(),settingsKey=`${this.settings.quality}:${this.settings.renderDistance}:${this.settings.simulationDistance}`;
@@ -330,7 +339,7 @@ export class World {
     for (let z = cz - radius; z <= cz + radius; z++)
       for (let x = cx - radius; x <= cx + radius; x++) {
         const d = Math.hypot(x - cx, z - cz);
-        if (d <= radius + 0.2 && !this.chunks.has(`${x},${z}`))
+        if ((d <= radius + 0.2 || this.chunkDistance(p,x,z)<=this.settings.simulationDistance+32) && !this.chunks.has(`${x},${z}`))
           needed.push({ x, z, d });
       }
     if(vx!==cx||vz!==cz)for(let z=vz-this.visualRadius;z<=vz+this.visualRadius;z++)for(let x=vx-this.visualRadius;x<=vx+this.visualRadius;x++){const d=Math.hypot(x-vx,z-vz);if(d<=this.visualRadius+.2&&!this.chunks.has(`${x},${z}`)&&!needed.some(a=>a.x===x&&a.z===z))needed.push({x,z,d:d+radius});}
@@ -340,7 +349,7 @@ export class World {
     for (const [key, c] of this.chunks) {
       const d = Math.hypot(c.x - cx, c.z - cz);
       if(updateLod){
-        const nearDistance={low:0,medium:60,high:95,ultra:140}[this.settings.quality];
+        const nearDistance={'very-low':0,low:0,medium:60,high:95,ultra:140}[this.settings.quality];
         for(const batch of c.treeBatches){let near=0,far=0;
           for(let i=0;i<batch.transforms.length;i++){const m=batch.transforms[i],e=m.elements,isNear=(e[12]-p.x)**2+(e[14]-p.z)**2<nearDistance**2,index=isNear?near++:far++;
             const foliage=isNear?batch.nearFoliage:batch.foliage,wood=isNear?batch.nearWood:batch.wood;
@@ -352,19 +361,24 @@ export class World {
       }
       c.grass.visible=this.dryGrass.visible(c.grass,view);
       c.group.visible=Math.hypot(c.x-vx,c.z-vz)<=this.visualRadius+.7;
-      if (d <= this.settings.simulationDistance/256 && !c.collider) {
+      const collisionDistance=this.chunkDistance(p,c.x,c.z);
+      if (collisionDistance <= this.settings.simulationDistance && !c.collider) {
         c.collider = this.physics.mesh(c.geometry);
-        c.obstacleColliders=c.obstacles.map(o=>sceneryCollider(this.physics,o,this.rockGeo));
       }
-      if (d > this.settings.simulationDistance/256+.5 && c.collider) {
+      // Ground stays continuous; scenery collision follows the chosen metre range.
+      if(c.collider){
+        for(const [obstacle,collider] of c.obstacleColliders)if(this.obstacleDistance(p,obstacle)>this.settings.simulationDistance+32){this.physics.world.removeCollider(collider,true);c.obstacleColliders.delete(obstacle);}
+        for(const obstacle of c.obstacles)if(!c.obstacleColliders.has(obstacle)&&this.obstacleDistance(p,obstacle)<=this.settings.simulationDistance)c.obstacleColliders.set(obstacle,sceneryCollider(this.physics,obstacle,this.rockGeo));
+      }
+      if (collisionDistance > this.settings.simulationDistance+64 && c.collider) {
         this.physics.world.removeCollider(c.collider, true);
         c.collider = undefined;
-        for(const o of c.obstacleColliders)this.physics.world.removeCollider(o,true);
-        c.obstacleColliders=[];
+        for(const o of c.obstacleColliders.values())this.physics.world.removeCollider(o,true);
+        c.obstacleColliders.clear();
       }
       if (d > radius + 1.7 && Math.hypot(c.x-vx,c.z-vz)>this.visualRadius+1.7) {
         if (c.collider) this.physics.world.removeCollider(c.collider, true);
-        for(const collider of c.obstacleColliders)this.physics.world.removeCollider(collider,true);
+        for(const collider of c.obstacleColliders.values())this.physics.world.removeCollider(collider,true);
         this.root.remove(c.group);
         c.geometry.dispose();
         c.group.traverse(o=>{if(o instanceof T.InstancedMesh)o.dispose();else if(o instanceof T.Mesh&&o.userData.streamGeometry)o.geometry.dispose()});

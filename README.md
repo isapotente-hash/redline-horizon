@@ -140,3 +140,9 @@ Character delivery uses thirty bounded binary transfers with six requests at a t
 ## On-foot controls
 
 Exiting switches from vehicle inputs to independent forward/right walking axes. Desktop WASD or arrows move and strafe relative to the camera; click the scene to capture the mouse for look (drag is available if capture is unavailable), and Esc releases it and pauses. Mobile phones/tablets show a left analogue joystick and a right camera-drag area in place of steering, GO, BRAKE, handbrake and wheelie buttons. Two fingers can walk and look together. Release, cancel, lost capture, focus loss, pause and possession changes clear touch movement. Entering restores the original vehicle controls. Touch UI and handlers use the existing mobile device policy, so touch laptops and resized desktops retain keyboard/mouse controls.
+
+## Very Low graphics and short-distance collision streaming
+
+Very Low renders at a maximum 0.5 device pixel ratio (Low remains 0.8), disables shadows, clouds, grass blades and post-processing, uses distant tree geometry, and caps ambient traffic at four. The existing Low/Medium/High/Ultra presets and default distances remain available. Render distance now ranges from 100 to 3000 m and simulation distance from 50 to 1000 m, in 25 m steps; settings survive reload. Active races and police keep their existing simulation rules.
+
+Terrain collision uses distance to each tile boundary instead of the integer tile offset. Nearby edges and diagonal corners are prefetched, so walking behind a parked vehicle cannot stop at an unloaded neighbouring tile merely because simulation distance is below 256 m. Ground keeps a small unloading buffer; nearby scenery colliders use actual metre distance plus their physical extent and a 32 m unloading buffer. This preserves solid vehicles/walls/trees while allowing distant collision work to unload. Walking floor checks exclude the parked vehicle so its chassis cannot be mistaken for ground.

@@ -15,7 +15,7 @@ export type Settings = {
   autopilotRoutes: boolean;
   autopilotSpeed: number;
   autopilotMode: "full" | "steering" | "speed";
-  quality: "low" | "medium" | "high" | "ultra";
+  quality: "very-low" | "low" | "medium" | "high" | "ultra";
   weather: "clear" | "cloudy" | "rain" | "fog";
   hour: number;
   cycle: boolean;
@@ -56,13 +56,13 @@ function validSettings(value:unknown):Settings {
   const result={...defaults}, a=record(value)?value:{};
   for(const key of ['adaptiveResolution','autopilotRoutes','cycle','automatic','traction','stability','diagnostics','repairCosts'] as const)
     if(typeof a[key]==='boolean')result[key]=a[key];
-  const bounds={rainIntensity:[0,1],cameraMotion:[0,1],renderDistance:[500,3000],simulationDistance:[250,1000],autopilotSpeed:[30,180],hour:[0,24],volume:[0,1],tint:[0,1],camera:[0,6]} as const;
+  const bounds={rainIntensity:[0,1],cameraMotion:[0,1],renderDistance:[100,3000],simulationDistance:[50,1000],autopilotSpeed:[30,180],hour:[0,24],volume:[0,1],tint:[0,1],camera:[0,6]} as const;
   for(const key of Object.keys(bounds) as (keyof typeof bounds)[])
     if(Number.isFinite(a[key]))result[key]=Math.max(bounds[key][0],Math.min(bounds[key][1],a[key]));
   result.camera=Math.floor(result.camera);
   result.raceLaps=a.raceLaps===3?3:1;
   if(['full','steering','speed'].includes(a.autopilotMode))result.autopilotMode=a.autopilotMode;
-  if(['low','medium','high','ultra'].includes(a.quality))result.quality=a.quality;
+  if(['very-low','low','medium','high','ultra'].includes(a.quality))result.quality=a.quality;
   if(['clear','cloudy','rain','fog'].includes(a.weather))result.weather=a.weather;
   if(['kmh','mph'].includes(a.units))result.units=a.units;
   for(const key of ['paint','wheels'] as const)if(typeof a[key]==='string'&&/^#[0-9a-f]{6}$/i.test(a[key]))result[key]=a[key];

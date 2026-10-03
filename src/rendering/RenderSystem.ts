@@ -162,16 +162,18 @@ export class RenderSystem {
   }
   applyQuality() {
     if (!this.renderer) return;
-    const s = { low: 1024, medium: 2048, high: 2048, ultra: 4096 }[
+    const s = { 'very-low': 512, low: 1024, medium: 2048, high: 2048, ultra: 4096 }[
       this.settings.quality
     ];
     this.sun.shadow.mapSize.set(s, s);
     this.sun.shadow.map?.dispose();
     this.sun.shadow.map = null;
+    this.renderer.shadowMap.enabled = this.settings.quality !== 'very-low';
+    this.clouds.visible = this.settings.quality !== 'very-low';
     this.renderer.setPixelRatio(
       Math.min(
         devicePixelRatio,
-        { low: 0.8, medium: 1, high: 1.5, ultra: 2 }[this.settings.quality],
+        { 'very-low': 0.5, low: 0.8, medium: 1, high: 1.5, ultra: 2 }[this.settings.quality],
       ),
     );
     this.basePixelRatio=this.renderer.getPixelRatio();this.resolutionScale=1;
@@ -274,7 +276,7 @@ export class RenderSystem {
       this.scene.environment = this.reflectionEnv.texture;
       this.scene.environmentIntensity = garage ? 1 : lerp(.78,.1,this.night);
     }
-    if (this.settings.quality === "low")
+    if (this.settings.quality === "low" || this.settings.quality === "very-low")
       this.renderer.render(this.scene, this.camera);
     else this.composer!.render();
   }
