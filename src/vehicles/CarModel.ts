@@ -13,6 +13,7 @@ export type CarVisual = {
   brake: T.MeshStandardMaterial;
   head: T.MeshStandardMaterial;
   lights: T.SpotLight[];
+  occupant?: T.Object3D;
 };
 export function makeCar(hero = true, color = "#b81120"): CarVisual {
   const root = new T.Group();

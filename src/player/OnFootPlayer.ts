@@ -1,6 +1,7 @@
 import * as T from 'three';
 import {PhysicsWorld,VehiclePhysics,R} from '../physics/VehiclePhysics';
 import {Controls} from '../input/InputManager';
+import {DriverAvatar} from './DriverAvatar';
 /** A single pooled character controller: enabled only while the car is parked. */
 export class OnFootPlayer {
   active=false;
@@ -22,19 +23,13 @@ export class OnFootPlayer {
   private readonly shape=new R.Capsule(.55,.28);
   private blocked=false;
   private readonly markBlocked=()=>{this.blocked=true;return false;};
-  constructor(private physics:PhysicsWorld){
+  constructor(private physics:PhysicsWorld,private avatar?:DriverAvatar){
     this.body=physics.world.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(0,-1000,0));
     this.collider=physics.world.createCollider(R.ColliderDesc.capsule(.55,.28).setFriction(0).setRestitution(0),this.body);
     this.controller=physics.world.createCharacterController(.025);
     this.controller.enableAutostep(.25,.2,false);this.controller.enableSnapToGround(.35);
     this.controller.setMaxSlopeClimbAngle(Math.PI/4);this.controller.setMinSlopeSlideAngle(Math.PI/3);
     this.controller.setApplyImpulsesToDynamicBodies(false);
-    const suit=new T.MeshStandardMaterial({color:0x253642,roughness:.8}),helmet=new T.MeshStandardMaterial({color:0xe4dfd2,roughness:.55});
-    const torso=new T.Mesh(new T.CapsuleGeometry(.26,.55,4,8),suit);torso.position.y=.04;
-    const head=new T.Mesh(new T.SphereGeometry(.22,10,8),helmet);head.position.y=.61;
-    this.root.add(torso,head);
-    for(const side of [-1,1]){const boot=new T.Mesh(new T.CapsuleGeometry(.10,.34,3,6),suit);boot.position.set(side*.14,-.52,0);this.root.add(boot);}
-    this.root.traverse(o=>{if(o instanceof T.Mesh)o.castShadow=true;});
     this.root.name='ON_FOOT_PLAYER';this.root.visible=false;this.body.setEnabled(false);
   }
   exit(car:VehiclePhysics){
@@ -62,7 +57,8 @@ export class OnFootPlayer {
     car.previousPosition.copy(car.position);car.previousRotation.copy(car.rotation);
     this.body.setTranslation(this.next,true);this.body.setNextKinematicTranslation(this.next);this.body.setEnabled(true);
     this.position.copy(this.next);this.previousPosition.copy(this.next);this.root.position.copy(this.next);
-    this.velocityY=0;this.active=true;this.root.visible=true;return true;
+    this.root.rotation.y=Math.atan2(-car.forward.x,-car.forward.z);
+    this.velocityY=0;this.active=true;this.root.visible=true;this.avatar?.onFoot(this.root);return true;
   }
   canEnter(car:VehiclePhysics){
     if(!this.active||this.position.distanceToSquared(car.position)>this.enterRadius*this.enterRadius)return false;
@@ -73,7 +69,7 @@ export class OnFootPlayer {
   }
   enter(car:VehiclePhysics,force=false){
     if(!this.active||(!force&&!this.canEnter(car)))return false;
-    this.active=false;this.root.visible=false;this.body.setEnabled(false);
+    this.active=false;this.root.visible=false;this.body.setEnabled(false);this.avatar?.returnToSeat();
     car.body.setBodyType(R.RigidBodyType.Dynamic,true);car.body.setLinvel({x:0,y:0,z:0},true);car.body.setAngvel({x:0,y:0,z:0},true);
     car.previousPosition.copy(car.position);car.previousRotation.copy(car.rotation);car.teleportSerial++;
     return true;

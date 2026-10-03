@@ -1,3 +1,4 @@
+import {DriverAvatar,loadDriverAvatar} from '../player/DriverAvatar';
 import {CornerGuide} from '../vehicles/CornerGuide';
 import {FrameDiagnostics} from './FrameDiagnostics';
 import {VehicleFinish} from '../vehicles/VehicleFinish';
@@ -56,6 +57,7 @@ export class Game {
   input = new InputManager();
   roads = new RoadNetwork();
   autopilot = new Autopilot(this.roads);
+  avatar!:DriverAvatar;
   guide=new CornerGuide(this.roads);diagnostics=new FrameDiagnostics();private finishes=new Map<CarVisual,VehicleFinish>();private physicsMs=0;
   autopilotManualReady = false;
   physics = new PhysicsWorld();
@@ -198,7 +200,7 @@ export class Game {
       this.ui.loading("LOADING PHYSICS");
       this.ui.root.inert=true;
       await this.physics.init();loadingProgress("physics",1);
-      const assetsReady=Promise.all([loadImportedVehicles(),loadCar()]);
+      const assetsReady=Promise.all([loadImportedVehicles(),loadCar(),loadDriverAvatar()]);
       void assetsReady.catch(()=>{});
       this.render = new RenderSystem(
         document.getElementById("game") as HTMLCanvasElement,
@@ -218,11 +220,12 @@ export class Game {
         this.roads,
         this.save.settings,
       );
-      this.foot=new OnFootPlayer(this.physics);this.render.scene.add(this.foot.root);
+      
       this.playerContacts=new PlayerContacts(this.physics,this.vehicle);
       await this.world.prime(this.vehicle.position);loadingProgress("terrain",1);
       this.ui.loading("LOADING VEHICLES");
-      const [,hero]=await assetsReady;
+      const [,hero,avatar]=await assetsReady;this.avatar=avatar;
+      this.foot=new OnFootPlayer(this.physics,avatar);this.render.scene.add(this.foot.root);
       this.car = this.baseCar = hero;
       this.render.scene.add(this.car.root);
       this.render.scene.add(...this.remotes.map(remote=>remote.root));
@@ -301,7 +304,7 @@ export class Game {
     const road=this.roads.nearest(p.x,p.z);
     this.vehicle.setPosition(p.x,Math.max(p.y,road.height+this.vehicle.chassis.rideHeight+.06),p.z,yaw);
     this.vehicle.applyLoadout(this.save.loadout,this.save.setup);
-    this.autopilot.disable();this.syncCar(1);
+    this.autopilot.disable();this.syncCar(1);this.avatar.occupy(this.car,spec);
   }
   applySettings(changed = "") {
     if (!this.car) return;
@@ -809,7 +812,7 @@ export class Game {
     // Re-read state because race completion can change it and reset the clock above.
     this.syncCar(this.state === "drive"&&!this.foot.active ? this.physicsClock.alpha : 1);
     this.foot.render(this.state==="drive"?this.physicsClock.alpha:1);
-    this.foot.root.visible=this.foot.active;
+    this.foot.root.visible=this.foot.active;this.avatar.update(dt,this.state==="drive");
     if(this.foot.active)this.camera.updateFoot(dt,this.foot.root,this.vehicle);
     else
     this.camera.update(
@@ -884,7 +887,7 @@ export class Game {
     if(!this.network.connected||this.preparingWorld)return;
     this.networkClock+=dt;if(this.networkClock<.05)return;this.networkClock%=.05;
     const p=this.outgoing,v=this.vehicle;
-    p.seq=++this.networkSequence;p.car=this.save.car.id;p.paint=this.save.settings.paint;p.active=visible;
+    p.seq=++this.networkSequence;p.car=this.save.car.id;p.paint=this.save.settings.paint;p.active=visible;p.occupied=!this.foot.active;
     p.p[0]=v.position.x;p.p[1]=v.position.y;p.p[2]=v.position.z;
     p.q[0]=v.rotation.x;p.q[1]=v.rotation.y;p.q[2]=v.rotation.z;p.q[3]=v.rotation.w;
     p.steer=v.steering;p.spin=v.wheelSpin;p.lean=v.lean;p.pitch=v.pitch;p.brake=v.braking;

@@ -9,7 +9,10 @@
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "test": "node --import tsx --test scripts/*.test.ts",
     "assets": "node --import tsx scripts/export-assets.ts && blender --background --python scripts/blender-assets.py -- --project .",
-    "build:offline": "tsc --noEmit && vite build --mode offline && node scripts/offline.mjs"
+    "build:offline": "tsc --noEmit && vite build --mode offline && node scripts/offline.mjs",
+    "prebuild": "node scripts/restore-racer.mjs",
+    "pretest": "node scripts/restore-racer.mjs",
+    "prebuild:offline": "node scripts/restore-racer.mjs"
   },
   "dependencies": {
     "three": "0.180.0",

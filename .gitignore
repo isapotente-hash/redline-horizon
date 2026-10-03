@@ -3,3 +3,4 @@ dist/
 .sites-runtime/
 *.blend1
 .env*
+assets/characters/RACER.glb

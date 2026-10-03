@@ -9,7 +9,7 @@ for(const entry of Object.values(manifest)){
 }
 // Publish only the current manifest, never stale bundles or an offline export.
 const allowed=file=>typeof file==='string'&&!file.includes('..')&&!path.isAbsolute(file)&&
- (['index.html','favicon.svg','redline-logo.png'].includes(file)||/^assets\/[\w.-]+\.(js|css|glb|wasm|png|svg)$/.test(file));
+ (['index.html','favicon.svg','redline-logo.png'].includes(file)||/^assets\/[\w.-]+\.(js|css|glb|bin|wasm|png|svg)$/.test(file));
 let previous=[];
 try{previous=JSON.parse(await readFile(path.join(root,'.release-manifest.json'),'utf8'));}catch{}
 for(const file of files){

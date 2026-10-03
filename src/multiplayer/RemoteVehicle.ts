@@ -61,6 +61,7 @@ export class RemoteVehicle {
       car.steers[i].rotation.y=i<2?T.MathUtils.lerp(a.pose.steer,b.pose.steer,alpha):0;
       car.wheels[i].rotation.x=T.MathUtils.lerp(a.pose.spin,b.pose.spin,alpha);
     }
+    if(car.occupant)car.occupant.visible=latest.occupied!==false;
     car.brake.emissiveIntensity=latest.brake>.1?4:.6;
     this.marker.position.y=3.5+Math.sin(now*.003)*.12;
     this.root.visible=this.position.distanceToSquared(local)<1400*1400;

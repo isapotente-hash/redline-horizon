@@ -25,9 +25,9 @@ export function loadingProgress(stage:keyof typeof weights,value:number){
   const bar=document.getElementById('startup-bar') as HTMLProgressElement|null,label=document.getElementById('startup-percent');
   if(bar)bar.value=percent;if(label)label.textContent=percent+'%';
 }
-const modelProgress=[0,0,0];
+const modelProgress=[0,0,0,0];
 export function modelLoaded(index:number,event?:ProgressEvent){
-  const totals=[6056948,4121632,925364]; // Fallback weights; byte percentages use Content-Length when available.
+  const totals=[6056948,4121632,925364,3580584]; // Fallback weights; byte percentages use Content-Length when available.
   modelProgress[index]=event?Math.min(.99,event.loaded/(event.total||totals[index])):1;
-  loadingProgress('assets',(modelProgress[0]+modelProgress[1]+modelProgress[2])/3);
+  loadingProgress('assets',(modelProgress[0]+modelProgress[1]+modelProgress[2]+modelProgress[3])/4);
 }

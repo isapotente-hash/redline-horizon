@@ -73,6 +73,8 @@ export function makeMotorbike(spec:CarSpec):CarVisual {
       for(let j=0;j<5;j++){const angle=j*Math.PI*2/5;link([side*.08,0,0],[side*.08,Math.cos(angle)*.21,Math.sin(angle)*.21],.013,alloy,wheel);}
     }
   }
+  // Keep the legacy NPC rider in an explicit occupancy group.
+  const riderStart=body.children.length;
   // Seated rider: helmet/visor, jacket, gloves, articulated legs and boots.
   const suit=new T.MeshStandardMaterial({color:0x25303c,roughness:.78}),helmet=new T.MeshStandardMaterial({color:0xebeff0,roughness:.28,metalness:.1});
   const torso=box(.43,.49,.27,0,1.38,.18,suit);torso.rotation.x=.32;
@@ -82,6 +84,7 @@ export function makeMotorbike(spec:CarSpec):CarVisual {
     link([side*.2,1.54,.11],[side*.32,1.31,-.22],.075,suit);link([side*.32,1.31,-.22],[side*.37,1.17,-.5],.06,suit);box(.11,.09,.12,side*.37,1.17,-.5,black);
     link([side*.19,1.04,.35],[side*.31,.75,-.07],.095,suit);link([side*.31,.75,-.07],[side*.26,.43,.34],.074,suit);box(.14,.12,.29,side*.27,.41,.27,black);
   }
+  const occupant=new T.Group();occupant.name='motorcycle-rider';for(const part of body.children.slice(riderStart))occupant.add(part);body.add(occupant);
   const light=new T.SpotLight(0xd9f3ff,0,110,.32,.6,1.2);light.position.set(0,1.01,-.85);light.target.position.set(0,.35,-35);body.add(light,light.target);
-  return {root,body,steers,wheels,steering,paint,alloy,glass,brake,head,lights:[light]};
+  return {root,body,steers,wheels,steering,paint,alloy,glass,brake,head,lights:[light],occupant};
 }

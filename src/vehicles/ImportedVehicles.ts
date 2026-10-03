@@ -49,8 +49,8 @@ export function createImportedVehicle(template:T.Group,spec:CarSpec):CarVisual {
     steers.push(pivot);wheels.push(wheel!);
   }
   const steering=new T.Group();body.add(steering);
-  const car={root,body,steers,wheels,steering,paint,alloy,glass,brake,head,lights:[] as T.SpotLight[]};
-  if(isBike(spec))addMotorcycleRider(body);
+  const car:CarVisual={root,body,steers,wheels,steering,paint,alloy,glass,brake,head,lights:[] as T.SpotLight[]};
+  if(isBike(spec))car.occupant=addMotorcycleRider(body);
   else {
     // Visible LED inserts follow the original lamp recesses and existing brake controls.
     for(const side of [-1,1]) {
