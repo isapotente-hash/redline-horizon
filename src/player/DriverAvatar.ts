@@ -60,6 +60,8 @@ export class DriverAvatar {
  readonly mixer:T.AnimationMixer;readonly idle:T.AnimationAction;readonly walk:T.AnimationAction;
  readonly bones:T.Bone[]=[];private rest:{position:T.Vector3;rotation:T.Quaternion}[]=[];
  private readonly skeletons:T.Skeleton[]=[];
+ private readonly seated:{skin:T.SkinnedMesh;mesh:T.Mesh;normals:T.Matrix3[]}[]=[];
+ private seatedFit='';
  private seat?:CarVisual;private spec?:CarSpec;private walking=false;private blend=0;
  private previous=new T.Vector3();private foot?:T.Group;
  private readonly p=new T.Vector3();private readonly q=new T.Quaternion();
@@ -73,6 +75,35 @@ export class DriverAvatar {
   this.root.updateMatrixWorld(true);const bounds=new T.Box3().setFromObject(this.model,true),hip=this.bone('Joints_01').getWorldPosition(new T.Vector3());
   this.model.position.set(-hip.x,-bounds.min.y,-hip.z);this.root.updateMatrixWorld(true);
   this.model.traverse(o=>{if(o instanceof T.Bone){this.bones.push(o);this.rest.push({position:o.position.clone(),rotation:o.quaternion.clone()});}if(o instanceof T.Mesh){o.castShadow=o.receiveShadow=true;o.frustumCulled=false;}if(o instanceof T.SkinnedMesh&&!this.skeletons.includes(o.skeleton))this.skeletons.push(o.skeleton);});
+  this.model.traverse(o=>{if(o instanceof T.SkinnedMesh){
+   const geometry=o.geometry.clone();geometry.deleteAttribute('skinIndex');geometry.deleteAttribute('skinWeight');
+   const mesh=new T.Mesh(geometry,o.material);mesh.name='SEATED_RACER_'+o.name;mesh.castShadow=mesh.receiveShadow=true;mesh.frustumCulled=false;
+   this.seated.push({skin:o,mesh,normals:o.skeleton.bones.map(()=>new T.Matrix3())});
+  }});
+ }
+ /** The seat pose is fixed. Bake it once per vehicle fit, keeping the original rig for walking. */
+ private showSeatedPose(spec:CarSpec){
+  this.root.updateWorldMatrix(true,false);this.root.updateMatrixWorld(true);
+  const bake=this.seatedFit!==spec.id,vertex=new T.Vector3(),normal=new T.Vector3(),sum=new T.Vector3(),matrix=new T.Matrix4();
+  for(const {skin,mesh,normals} of this.seated){
+   mesh.position.copy(skin.position);mesh.quaternion.copy(skin.quaternion);mesh.scale.copy(skin.scale);mesh.layers.mask=skin.layers.mask;
+   if(bake){
+    for(let b=0;b<normals.length;b++)normals[b].setFromMatrix4(matrix.copy(skin.bindMatrixInverse).multiply(skin.skeleton.bones[b].matrixWorld).multiply(skin.skeleton.boneInverses[b]).multiply(skin.bindMatrix));
+    const source=skin.geometry.attributes,target=mesh.geometry.attributes;
+    for(let v=0;v<source.position.count;v++){
+     skin.getVertexPosition(v,vertex);target.position.setXYZ(v,vertex.x,vertex.y,vertex.z);
+     for(const name of ['normal','tangent'])if(source[name]){
+      normal.fromBufferAttribute(source[name],v);sum.set(0,0,0);
+      for(let i=0;i<4;i++){const weight=source.skinWeight.getComponent(v,i);if(weight)sum.addScaledVector(vertex.copy(normal).applyMatrix3(normals[source.skinIndex.getComponent(v,i)]),weight);}
+      sum.normalize();target[name].setXYZ(v,sum.x,sum.y,sum.z);
+     }
+    }
+    target.position.needsUpdate=true;target.normal.needsUpdate=true;if(target.tangent)target.tangent.needsUpdate=true;
+    mesh.geometry.computeBoundingBox();mesh.geometry.computeBoundingSphere();
+   }
+   skin.visible=false;skin.parent!.add(mesh);mesh.visible=true;
+  }
+  this.seatedFit=spec.id;
  }
  bone(name:string){const b=this.model.getObjectByName(name);if(!(b instanceof T.Bone))throw Error('Racer skeleton missing '+name);return b;}
  private resetPose(){for(let i=0;i<this.bones.length;i++){this.bones[i].position.copy(this.rest[i].position);this.bones[i].quaternion.copy(this.rest[i].rotation);}this.root.updateMatrixWorld(true);}
@@ -111,9 +142,10 @@ export class DriverAvatar {
    this.chain(left?'Joints_55_055':'Joints_60_060',left?'Joints_56_056':'Joints_61_061',left?'Joints_57_057':'Joints_62_062',car.body.localToWorld(foot),car.body.localToWorld(knee));
    const ankle=this.bone(left?'Joints_57_057':'Joints_62_062'),toe=this.bone(left?'Joints_58_058':'Joints_63_063'),flat=car.body.worldToLocal(ankle.getWorldPosition(new T.Vector3())).add(new T.Vector3(0,-.04,-.14));this.aim(ankle,toe,car.body.localToWorld(flat));
   }
-  this.root.visible=true;
+  this.showSeatedPose(spec);this.root.visible=true;
  }
  onFoot(root:T.Group) {
+  for(const {skin,mesh} of this.seated){mesh.removeFromParent();skin.visible=true;}
   this.walking=true;this.foot=root;root.add(this.root);this.root.position.set(0,-.83,0);this.root.rotation.set(0,0,0);this.root.scale.setScalar(1);this.resetPose();
   this.blend=0;this.idle.setEffectiveWeight(1);this.walk.setEffectiveWeight(0);this.mixer.setTime(0);this.previous.copy(root.position);this.root.visible=true;
  }

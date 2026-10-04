@@ -70,6 +70,22 @@ test('walking, re-entry, paused drawing and teleports refresh GPU skinning witho
   assert.equal(scene.getObjectsByProperty('name','PLAYER_AVATAR').length,1);
  }
 });
+test('every seated vehicle renders the exact fitted pose without GPU skinning; walking restores the original rig and reuses geometry',async()=>{
+ const avatar=new DriverAvatar(await model('characters/RACER.glb')),scene=new T.Scene(),foot=new T.Group(),loaded=await ready;scene.add(foot);
+ const skins:T.SkinnedMesh[]=[];avatar.model.traverse(o=>{if(o instanceof T.SkinnedMesh)skins.push(o);});let geometryIds:string[]=[];
+ for(const spec of CARS){
+  const car=isBike(spec)?createImportedVehicle(loaded.bike.scene,spec):makeVehicle(spec);scene.add(car.root);car.root.position.set(1000,14,-2000);car.root.rotation.set(.04,.7,-.08);avatar.occupy(car,spec);scene.updateMatrixWorld(true);
+  const display=avatar.model.children.length;const seated:T.Mesh[]=[];avatar.model.traverse(o=>{if(o instanceof T.Mesh&&o.name.startsWith('SEATED_RACER_'))seated.push(o);});assert.equal(seated.length,skins.length);
+  for(const skin of skins){
+   assert.equal(skin.visible,false);const mesh=seated.find(m=>m.name==='SEATED_RACER_'+skin.name)!;assert.equal((mesh as any).isSkinnedMesh,undefined);assert.equal(mesh.geometry.getAttribute('skinIndex'),undefined);assert.equal(mesh.geometry.getAttribute('skinWeight'),undefined);assert.equal(mesh.material,skin.material);
+   for(let i=0;i<skin.geometry.attributes.position.count;i+=37){const expected=skin.getVertexPosition(i,new T.Vector3()).applyMatrix4(skin.matrixWorld),actual=new T.Vector3().fromBufferAttribute(mesh.geometry.attributes.position,i).applyMatrix4(mesh.matrixWorld);assert.ok(actual.distanceTo(expected)<.002,`${spec.id} ${skin.name} vertex ${i}`);}
+  }
+  const ids=seated.map(m=>m.geometry.uuid);if(geometryIds.length)assert.deepEqual(ids,geometryIds);else geometryIds=ids;
+  const versions=seated.map(m=>m.geometry.attributes.position.version);for(let n=0;n<6;n++){car.root.position.z-=.7;avatar.update(1/60);scene.updateMatrixWorld(true);}assert.deepEqual(seated.map(m=>m.geometry.attributes.position.version),versions,'no seated geometry uploads during driving');
+  for(let n=0;n<3;n++){avatar.onFoot(foot);assert.ok(skins.every(s=>s.visible));assert.equal(avatar.model.getObjectsByProperty('type','Mesh').filter(o=>o.name.startsWith('SEATED_RACER_')).length,0);foot.position.z-=.1;avatar.update(1/60);avatar.returnToSeat();assert.ok(skins.every(s=>!s.visible));assert.equal(avatar.model.children.length,display);}
+  assert.equal(scene.getObjectsByProperty('name','PLAYER_AVATAR').length,1);scene.remove(car.root);
+ }
+});
 test('peer pose occupancy is validated and removes the stationary remote rider when the player exits',()=>{
  const pose={t:'state',seq:1,car:'pulse',paint:'#ffffff',active:true,occupied:false,p:[0,.6,0],q:[0,0,0,1],steer:0,spin:0,lean:0,pitch:0,brake:0,race:'',progress:0,finished:false,time:0};assert.ok(validPose(pose));assert.equal(validPose({...pose,occupied:'false'}),false);const remote=new RemoteVehicle();remote.receive(pose as any,1000);remote.update(1010,true,new T.Vector3());const rider=remote.root.getObjectByName('motorcycle-rider')!;assert.equal(rider.visible,false);remote.receive({...pose,seq:2,occupied:true} as any,1050);remote.update(1060,true,new T.Vector3());assert.equal(rider.visible,true);
 });
