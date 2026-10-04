@@ -1059,12 +1059,15 @@ label output {
 .menu-foot {margin-top:23px;padding-left:11px;gap:6px;}
 .menu-foot span:first-child {font-size:10px;}
 #edition {right:4vw;top:6vh;bottom:auto;}
-.wallet {display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:1px;color:#ffe3a1;}
-.wallet b {font-variant-numeric:tabular-nums;font-size:17px;}
-.wallet span {color:inherit!important;font-size:9px!important;display:inline!important;}
-.wallet .coin-symbol {font-size:21px!important;}
+.wallet {position:relative;display:flex;align-items:center;gap:9px;padding:7px 14px 7px 9px;border:1px solid #62666b;border-radius:12px 4px 12px 4px;background:linear-gradient(120deg,#202329f5,#101216f5);box-shadow:0 3px 10px #0004;pointer-events:none;}
+.wallet::after {content:"";position:absolute;right:-1px;top:7px;bottom:7px;width:3px;border-radius:3px;background:#ee334b;transform:skewY(-16deg);}
+.wallet .coin-icon {width:32px;height:32px;flex-shrink:0;filter:drop-shadow(0 2px 2px #0005);}
+.wallet .coin-copy {display:flex;flex-direction:column;min-width:0;gap:2px;}
+.wallet .coin-label {display:block;font-size:8px;color:#c2c4c8;letter-spacing:2px;line-height:10px;}
+.wallet .coin-balance {font-variant-numeric:tabular-nums;font-size:21px;font-weight:800;color:#fff;letter-spacing:.4px;line-height:1.1;white-space:nowrap;}
 #edition .wallet {justify-content:flex-end;margin-bottom:8px;}
-.hud-wallet {background:#10151baa;padding:3px 12px;border:1px solid #fff1;}
+.hud-wallet {align-self:center;min-width:140px;}
+#coin-reward {position:absolute;top:calc(3.5vh + 60px);right:3vw;min-width:76px;padding:6px 12px;border:1px solid #efc367;border-radius:6px 2px;background:#251d10ed;box-shadow:0 2px 8px #0004;color:#ffe2a1;font-size:18px;font-weight:800;font-style:italic;font-variant-numeric:tabular-nums;text-align:center;pointer-events:none;}
 .loading {left:8vw;top:20vh;transform:none;text-align:left;width:70vw;max-width:750px;}
 .loading .wordmark {font-size:clamp(64px,9vw,138px);margin-top:34px;}
 .loading .loading-tagline {font-size:16px;letter-spacing:0;color:#abb8c2;margin-top:40px;}
@@ -1211,16 +1214,20 @@ label output {
   .mobile-device .drive-ui .topbar .hud-wallet {
     grid-column:1 / -1;
     grid-row:1;
-    justify-self:center;
+    justify-self:end;
     justify-content:center;
     min-height:28px;
-    max-width:112px;
-    padding:2px 7px;
+    width:128px;
+    min-width:0;
+    max-width:128px;
+    padding:3px 9px 3px 5px;
     gap:5px;
     white-space:nowrap;
   }
-  .mobile-device .drive-ui .hud-wallet .coin-balance {font-size:12px;overflow:hidden;text-overflow:ellipsis}
-  .mobile-device .drive-ui .hud-wallet .coin-symbol {font-size:17px!important}
+  .mobile-device .drive-ui .hud-wallet .coin-balance {font-size:14px;overflow:hidden;text-overflow:ellipsis;letter-spacing:0}
+  .mobile-device .drive-ui .hud-wallet .coin-icon {width:24px;height:24px;filter:none}
+  .mobile-device .drive-ui .hud-wallet .coin-label {display:none}
+  .mobile-device #coin-reward {top:calc(var(--hud-top) + 98px);right:var(--hud-right);font-size:14px;padding:5px 9px;min-width:64px;}
   .mobile-device .drive-ui .topbar button {
     grid-row:2;
     min-width:0;
@@ -1317,10 +1324,12 @@ label output {
     grid-template-rows:44px;
     justify-content:end;
     gap:4px;
+    margin-right:140px;
   }
   .mobile-device .drive-ui .topbar button {grid-row:1;font-size:9px}
   .mobile-device .drive-ui .topbar #autopilot-toggle {font-size:9px}
-  .mobile-device .drive-ui .topbar .hud-wallet {position:absolute;top:8px;left:50%;transform:translateX(-50%);max-width:100px}
+  .mobile-device .drive-ui .topbar .hud-wallet {position:absolute;top:5px;left:auto;right:0;transform:none;max-width:128px}
+  .mobile-device #coin-reward {top:calc(var(--hud-top) + 48px)}
   .mobile-device .drive-ui #mp-hud {top:var(--hud-info-top);left:auto;right:var(--hud-right);max-width:180px}
   .mobile-device .drive-ui:has(#race-hud[style*="flex"]) #mp-hud {top:calc(var(--hud-info-top) + 64px);right:calc(var(--hud-right) + var(--dial-size) + 12px)}
   .mobile-device .drive-ui #route-choice {top:var(--hud-info-top);left:calc(var(--hud-left) + var(--map-size) + 14px);max-width:24vw}
