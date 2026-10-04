@@ -1,4 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';import * as T from 'three';import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {WebGLObjects} from '../node_modules/three/src/renderers/webgl/WebGLObjects.js';
 import {DriverAvatar,driverFit,loadRacerData} from '../src/player/DriverAvatar';import {CARS,isBike} from '../src/vehicles/CarCatalog';import {makeCar,CarVisual} from '../src/vehicles/CarModel';import {makeVehicle} from '../src/vehicles/VehicleModels';import {createImportedVehicle} from '../src/vehicles/ImportedVehicles';import {PhysicsWorld,VehiclePhysics,R} from '../src/physics/VehiclePhysics';import {OnFootPlayer} from '../src/player/OnFootPlayer';import {RoadNetwork} from '../src/world/RoadNetwork';import {defaults} from '../src/core/SaveManager';import {validPose} from '../src/multiplayer/Protocol';import {RemoteVehicle} from '../src/multiplayer/RemoteVehicle';
 (globalThis as any).self=globalThis;(globalThis as any).createImageBitmap=async()=>({width:1024,height:1024,close(){}});(globalThis as any).ProgressEvent=class{constructor(type:string,init:any){Object.assign(this,{type,...init})}};
 async function model(path:string){const b=await readFile(new URL('../assets/'+path,import.meta.url));return new GLTFLoader().parseAsync(b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength),'');}
@@ -26,6 +27,48 @@ test('real exit/enter parks each vehicle and reuses one character visual and Rap
 });
 test('walking uses authored bone animation but never adds independent root movement',async()=>{
  const avatar=new DriverAvatar(await model('characters/RACER.glb')),foot=new T.Group();avatar.onFoot(foot);const position=avatar.root.position.clone(),leg=avatar.bone('Joints_56_056').quaternion.clone();for(let i=0;i<30;i++){foot.position.z-=.06;avatar.update(1/60);}assert.ok(leg.angleTo(avatar.bone('Joints_56_056').quaternion)>.1);assert.ok(avatar.root.position.distanceTo(position)<1e-10);assert.equal(avatar.root.parent,foot);assert.ok(Number.isFinite(new T.Box3().setFromObject(avatar.root,true).max.y));
+});
+// Mirror the installed renderer: projectObject updates skinning, increments its
+// frame counter, then optionally refreshes the shadow pass. The next main pass
+// can therefore skip its skeleton update after a shadow frame.
+function skinCache(){
+ const info={render:{frame:0}},objects=WebGLObjects({}, {get:(_o:any,g:any)=>g,update:()=>{}},{},info);
+ return {draw(scene:T.Scene,meshes:T.SkinnedMesh[],shadow:boolean){
+  scene.updateMatrixWorld();for(const mesh of meshes)objects.update(mesh);
+  info.render.frame++;if(shadow)for(const mesh of meshes)objects.update(mesh);
+ }};
+}
+function gpuVertex(mesh:T.SkinnedMesh,index:number){
+ const g=mesh.geometry,base=new T.Vector3().fromBufferAttribute(g.attributes.position,index).applyMatrix4(mesh.bindMatrix),out=new T.Vector3();
+ for(let i=0;i<4;i++){
+  const bone=g.attributes.skinIndex.getComponent(index,i),weight=g.attributes.skinWeight.getComponent(index,i);
+  if(weight)out.addScaledVector(base.clone().applyMatrix4(new T.Matrix4().fromArray(mesh.skeleton.boneMatrices,bone*16)),weight);
+ }
+ return out.applyMatrix4(mesh.bindMatrixInverse).applyMatrix4(mesh.matrixWorld);
+}
+test('seated rider skin follows the moving bike on every frame with alternating, disabled and full-rate shadows',async()=>{
+ for(const spec of CARS.filter(isBike))for(const shadowMode of ['alternating','off','on']){
+  const avatar=new DriverAvatar(await model('characters/RACER.glb')),scene=new T.Scene(),car=createImportedVehicle((await ready).bike.scene,spec);
+  scene.add(car.root);avatar.occupy(car,spec);const meshes:T.SkinnedMesh[]=[];avatar.model.traverse(o=>{if(o instanceof T.SkinnedMesh)meshes.push(o);});const cache=skinCache();
+  for(let frame=0;frame<30;frame++){
+   car.root.position.set(500+frame*.45,12+Math.sin(frame*.1)*.1,-900-frame*.8);car.root.rotation.set(.04*Math.sin(frame*.2),.7+frame*.012,.15*Math.sin(frame*.3));car.body.rotation.x=.08*Math.sin(frame*.3);
+   avatar.update(1/60);cache.draw(scene,meshes,shadowMode==='on'||(shadowMode==='alternating'&&frame%2===0));
+   for(const mesh of meshes){const expected=mesh.getVertexPosition(0,new T.Vector3()).applyMatrix4(mesh.matrixWorld),error=gpuVertex(mesh,0).distanceTo(expected);assert.ok(error<.002,`${shadowMode} frame ${frame} ${mesh.name}: rider lag ${error.toFixed(3)} m`);}
+  }
+ }
+});
+test('walking, re-entry, paused drawing and teleports refresh GPU skinning without duplicating the avatar',async()=>{
+ const avatar=new DriverAvatar(await model('characters/RACER.glb')),scene=new T.Scene(),foot=new T.Group(),spec=CARS.find(c=>c.id==='pulse')!,car=createImportedVehicle((await ready).bike.scene,spec),meshes:T.SkinnedMesh[]=[];
+ scene.add(car.root,foot);avatar.model.traverse(o=>{if(o instanceof T.SkinnedMesh)meshes.push(o);});const cache=skinCache();avatar.occupy(car,spec);
+ for(let frame=0;frame<36;frame++){
+  if(frame===6||frame===24)avatar.onFoot(foot);
+  if(frame===18||frame===30)avatar.returnToSeat();
+  car.root.position.set(frame<30?frame*.4:4000+frame,10,-800-frame);car.root.rotation.y=frame*.02;
+  foot.position.set(frame*.07,.88,-frame*.1);foot.rotation.y=frame*.015;
+  avatar.update(frame>=30?0:1/60,frame<30);cache.draw(scene,meshes,frame%2===0);
+  for(const mesh of meshes){const expected=mesh.getVertexPosition(0,new T.Vector3()).applyMatrix4(mesh.matrixWorld);assert.ok(gpuVertex(mesh,0).distanceTo(expected)<.002,`transition frame ${frame} ${mesh.name}`);}
+  assert.equal(scene.getObjectsByProperty('name','PLAYER_AVATAR').length,1);
+ }
 });
 test('peer pose occupancy is validated and removes the stationary remote rider when the player exits',()=>{
  const pose={t:'state',seq:1,car:'pulse',paint:'#ffffff',active:true,occupied:false,p:[0,.6,0],q:[0,0,0,1],steer:0,spin:0,lean:0,pitch:0,brake:0,race:'',progress:0,finished:false,time:0};assert.ok(validPose(pose));assert.equal(validPose({...pose,occupied:'false'}),false);const remote=new RemoteVehicle();remote.receive(pose as any,1000);remote.update(1010,true,new T.Vector3());const rider=remote.root.getObjectByName('motorcycle-rider')!;assert.equal(rider.visible,false);remote.receive({...pose,seq:2,occupied:true} as any,1050);remote.update(1060,true,new T.Vector3());assert.equal(rider.visible,true);

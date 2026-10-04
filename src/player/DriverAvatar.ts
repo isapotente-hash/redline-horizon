@@ -59,6 +59,7 @@ export class DriverAvatar {
  readonly root=new T.Group();readonly model:T.Group;
  readonly mixer:T.AnimationMixer;readonly idle:T.AnimationAction;readonly walk:T.AnimationAction;
  readonly bones:T.Bone[]=[];private rest:{position:T.Vector3;rotation:T.Quaternion}[]=[];
+ private readonly skeletons:T.Skeleton[]=[];
  private seat?:CarVisual;private spec?:CarSpec;private walking=false;private blend=0;
  private previous=new T.Vector3();private foot?:T.Group;
  private readonly p=new T.Vector3();private readonly q=new T.Quaternion();
@@ -71,7 +72,7 @@ export class DriverAvatar {
   this.root.updateMatrixWorld(true);const box=new T.Box3().setFromObject(this.model,true),scale=1.78/(box.max.y-box.min.y);this.model.scale.setScalar(scale);
   this.root.updateMatrixWorld(true);const bounds=new T.Box3().setFromObject(this.model,true),hip=this.bone('Joints_01').getWorldPosition(new T.Vector3());
   this.model.position.set(-hip.x,-bounds.min.y,-hip.z);this.root.updateMatrixWorld(true);
-  this.model.traverse(o=>{if(o instanceof T.Bone){this.bones.push(o);this.rest.push({position:o.position.clone(),rotation:o.quaternion.clone()});}if(o instanceof T.Mesh){o.castShadow=o.receiveShadow=true;o.frustumCulled=false;}});
+  this.model.traverse(o=>{if(o instanceof T.Bone){this.bones.push(o);this.rest.push({position:o.position.clone(),rotation:o.quaternion.clone()});}if(o instanceof T.Mesh){o.castShadow=o.receiveShadow=true;o.frustumCulled=false;}if(o instanceof T.SkinnedMesh&&!this.skeletons.includes(o.skeleton))this.skeletons.push(o.skeleton);});
  }
  bone(name:string){const b=this.model.getObjectByName(name);if(!(b instanceof T.Bone))throw Error('Racer skeleton missing '+name);return b;}
  private resetPose(){for(let i=0;i<this.bones.length;i++){this.bones[i].position.copy(this.rest[i].position);this.bones[i].quaternion.copy(this.rest[i].rotation);}this.root.updateMatrixWorld(true);}
@@ -118,8 +119,15 @@ export class DriverAvatar {
  }
  returnToSeat(){if(this.seat&&this.spec)this.occupy(this.seat,this.spec);}
  update(dt:number,animate=true) {
-  if(!this.walking||!this.foot||!animate||dt<=0)return;
-  const distance=this.foot.position.distanceTo(this.previous);this.previous.copy(this.foot.position);const speed=Math.min(4.5,distance/dt),target=speed>.15?1:0;
-  this.blend=T.MathUtils.damp(this.blend,target,16,dt);this.idle.setEffectiveWeight(1-this.blend);this.walk.setEffectiveWeight(this.blend).setEffectiveTimeScale(T.MathUtils.clamp(speed/2.5,.7,1.8));this.mixer.update(dt);
+  if(this.walking&&this.foot&&animate&&dt>0){
+   const distance=this.foot.position.distanceTo(this.previous);this.previous.copy(this.foot.position);const speed=Math.min(4.5,distance/dt),target=speed>.15?1:0;
+   this.blend=T.MathUtils.damp(this.blend,target,16,dt);this.idle.setEffectiveWeight(1-this.blend);this.walk.setEffectiveWeight(this.blend).setEffectiveTimeScale(T.MathUtils.clamp(speed/2.5,.7,1.8));this.mixer.update(dt);
+  }
+  // The renderer caches skinning by render-pass frame. An alternating shadow
+  // pass can leave that cache one frame ahead of the next main pass, so refresh
+  // explicitly after vehicle/foot interpolation, including seated and paused poses.
+  this.root.updateWorldMatrix(true,false);
+  this.root.updateMatrixWorld(true); // SkinnedMesh refreshes its attached bind inverse here.
+  for(const skeleton of this.skeletons)skeleton.update();
  }
 }
