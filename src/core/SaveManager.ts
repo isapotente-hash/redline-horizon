@@ -1,3 +1,4 @@
+import {AsyncProfileStore,IndexedDBProfileStore} from './AsyncProfileStore';
 import {DriverSetup,validateSetup,SETUP_PRESETS} from '../vehicles/DriverSetup';
 import {LIVERIES,Livery,validLivery,cleanPlate} from '../vehicles/CosmeticCatalog';
 import {validRoute,RouteId} from "../racing/RouteCatalog";
@@ -74,7 +75,12 @@ const nonnegative=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)?Math.max(
 export class SaveManager {
   onError:()=>void=()=>{};
   storageError=false;
+  background=false;
   private readOnly=false;
+  private savedAt=0;
+  private loadedSavedAt=0;
+  private pendingProfile?:ReturnType<SaveManager["snapshot"]>;
+  private writing?:Promise<boolean>;
   // The current world has no locked tracks; retain legacy unlock IDs for future catalogs.
   unlockedTracks:string[]=[];
   settings: Settings = { ...defaults };
@@ -152,12 +158,16 @@ export class SaveManager {
   best = 0;
   distance = 0;
   position: { x: number; y: number; z: number; yaw: number } | null = null;
-  constructor() {
+  constructor(private checkpoints:AsyncProfileStore=new IndexedDBProfileStore()) {
     const loaded=readSave();
     this.readOnly=loaded.readOnly;
     this.storageError=loaded.unavailable||loaded.readOnly;
+    this.loadedSavedAt=this.savedAt=nonnegative(loaded.data?.savedAt);
+    this.loadData(loaded.data);
+    if(loaded.data&&loaded.migrate&&!this.readOnly)this.save();
+  }
+  private loadData(a:Record<string,any>|null){
     try {
-      const a = loaded.data;
       if (a) {
         this.settings = validSettings(a.settings);
         this.ownedLiveries=['factory',...(Array.isArray(a.ownedLiveries)?a.ownedLiveries.filter((id:unknown)=>validLivery(id)&&id!=='factory'):[])];
@@ -192,14 +202,10 @@ export class SaveManager {
         }
       }
     } catch { this.storageError=true; }
-    // Import before Game creates UI, coin items or vehicle kits. Leave legacy keys untouched.
-    if(loaded.data&&!this.readOnly)this.save();
   }
-  save():boolean {
-    if(this.readOnly)return false;
-    try {
-      const serialized=JSON.stringify({
-        schemaVersion:SAVE_VERSION,savedAt:Date.now(),
+  private snapshot(){
+    return {
+        schemaVersion:SAVE_VERSION,savedAt:this.savedAt=Math.max(Date.now(),this.savedAt+1),
         coins:this.coins,ownedCars:[...this.ownedCars],selectedCar:this.selectedCar,
         collectedCoins:[...this.collectedCoins],unlockedTracks:this.unlockedTracks,
         setups:this.setups,ownedLiveries:this.ownedLiveries,liveries:this.liveries,plates:this.plates,wetRouteBests:this.wetRouteBests,wetBestByLaps:this.wetBestByLaps,
@@ -207,7 +213,55 @@ export class SaveManager {
         settings:this.settings,routeBests:this.routeBests,best:this.best,bestByLaps:this.bestByLaps,lapRecords:this.lapRecords,
         layoutVersion:2,legacyRecords:this.legacyRecords,distance:this.distance,
         statistics:this.statistics,position:this.position,
-      });
+    };
+  }
+  savePosition(vehicle:{distance:number;position:{x:number;y:number;z:number};forward:{x:number;z:number}},checkpoint=false){
+    this.distance=vehicle.distance;
+    this.position={x:vehicle.position.x,y:vehicle.position.y,z:vehicle.position.z,yaw:Math.atan2(-vehicle.forward.x,-vehicle.forward.z)};
+    if(checkpoint)void this.saveAsync();else this.saveNow();
+  }
+  /** Restore a newer asynchronous checkpoint before vehicles/UI enter gameplay. */
+  async restoreCheckpoint(){
+    if(this.readOnly)return false;
+    const revision=this.savedAt;
+    try {
+      const a=await this.checkpoints.read();
+      if(this.savedAt!==revision)return false;
+      if(!record(a))return false;
+      if(a.schemaVersion>SAVE_VERSION){this.readOnly=true;this.storageError=true;return false;}
+      if(a.schemaVersion!==SAVE_VERSION||!Number.isFinite(a.savedAt)||a.savedAt<=this.loadedSavedAt)return false;
+      this.loadData(a);this.savedAt=Math.max(this.savedAt,a.savedAt);
+      this.save();return true;
+    }catch{return false;}
+  }
+  /** Coalesce pending writes. IndexedDB performs disk I/O outside the animation frame. */
+  saveAsync():Promise<boolean>{
+    if(this.readOnly)return Promise.resolve(false);
+    this.pendingProfile=structuredClone(this.snapshot());
+    if(this.writing)return this.writing;
+    let resolve!:(success:boolean)=>void;
+    const task=this.writing=new Promise<boolean>(r=>resolve=r);
+    void (async()=>{
+      let success=false;
+      try{
+        while(this.pendingProfile){const profile=this.pendingProfile;this.pendingProfile=undefined;await this.checkpoints.write(profile);}
+        this.storageError=false;success=true;
+      }catch{
+        this.pendingProfile=undefined;
+        if(!this.storageError)this.onError();this.storageError=true;
+      }finally{this.writing=undefined;resolve(success);}
+    })();
+    return task;
+  }
+  save():boolean {
+    if(this.background){if(this.readOnly)return false;void this.saveAsync();return true;}
+    return this.saveNow();
+  }
+  private saveNow():boolean {
+    if(this.readOnly)return false;
+    try {
+      this.pendingProfile=undefined;
+      const serialized=JSON.stringify(this.snapshot());
       // setItem is atomic. A failed write must not erase the last good profile.
       localStorage.setItem(SAVE_KEY,serialized);
       this.storageError=false;

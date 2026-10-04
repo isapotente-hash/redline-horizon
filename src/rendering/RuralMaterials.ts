@@ -4,7 +4,7 @@ import {rng} from '../core/math';
 function texture(pixels:Uint8Array,width:number,height:number,color=false){
   const t=new T.DataTexture(pixels,width,height,T.RGBAFormat);
   t.wrapS=t.wrapT=T.RepeatWrapping;t.magFilter=T.LinearFilter;t.minFilter=T.LinearMipmapLinearFilter;
-  t.generateMipmaps=true;t.anisotropy=4;t.colorSpace=color?T.SRGBColorSpace:T.NoColorSpace;t.needsUpdate=true;return t;
+  t.generateMipmaps=true;t.anisotropy=8;t.colorSpace=color?T.SRGBColorSpace:T.NoColorSpace;t.needsUpdate=true;return t;
 }
 /** Baked once at startup: bounded texture memory, no downloads or frame-time drawing. */
 export function asphaltMaterial(){

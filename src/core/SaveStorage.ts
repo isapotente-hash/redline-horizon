@@ -25,14 +25,14 @@ export function parseSave(raw:string|null):Record<string,any>|null {
       loadouts:a.loadouts??a.carLoadouts,ownedUpgrades:a.ownedUpgrades??a.purchasedUpgrades};
   } catch { return null; }
 }
-export function readSave():{data:Record<string,any>|null;readOnly:boolean;unavailable:boolean} {
+export function readSave():{data:Record<string,any>|null;readOnly:boolean;unavailable:boolean;migrate:boolean} {
   try {
     const primary=parseSave(localStorage.getItem(SAVE_KEY));
     // Never overwrite a newer format with defaults from an older application build.
-    if(primary && primary.schemaVersion>SAVE_VERSION)return {data:null,readOnly:true,unavailable:false};
-    if(primary)return {data:primary,readOnly:false,unavailable:false};
+    if(primary && primary.schemaVersion>SAVE_VERSION)return {data:null,readOnly:true,unavailable:false,migrate:false};
+    if(primary)return {data:primary,readOnly:false,unavailable:false,migrate:primary.schemaVersion!==SAVE_VERSION||primary.layoutVersion!==2};
     const backup=parseSave(localStorage.getItem(BACKUP_KEY));
-    if(backup && !(backup.schemaVersion>SAVE_VERSION))return {data:backup,readOnly:false,unavailable:false};
+    if(backup && !(backup.schemaVersion>SAVE_VERSION))return {data:backup,readOnly:false,unavailable:false,migrate:true};
     const keys=[...LEGACY_KEYS];
     // Discover only Redline-prefixed save/profile variants, never unrelated site data.
     for(let i=0;i<localStorage.length;i++){
@@ -46,6 +46,6 @@ export function readSave():{data:Record<string,any>|null;readOnly:boolean;unavai
       const time=Number.isFinite(a.savedAt)?a.savedAt:Number.isFinite(a.updatedAt)?a.updatedAt:0;
       if(time>timestamp){newest=a;timestamp=time;}
     }
-    return {data:newest,readOnly:false,unavailable:false};
-  } catch { return {data:null,readOnly:false,unavailable:true}; }
+    return {data:newest,readOnly:false,unavailable:false,migrate:!!newest};
+  } catch { return {data:null,readOnly:false,unavailable:true,migrate:false}; }
 }

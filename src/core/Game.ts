@@ -200,6 +200,7 @@ export class Game {
     try {
       this.ui.loading("LOADING PHYSICS");
       this.ui.root.inert=true;
+      await this.save.restoreCheckpoint();this.ui.sync();
       await this.physics.init();loadingProgress("physics",1);
       const assetsReady=Promise.all([loadImportedVehicles(),loadCar(),loadDriverAvatar()]);
       void assetsReady.catch(()=>{});
@@ -264,7 +265,7 @@ export class Game {
       this.camera.update(0,this.vehicle,this.car.root,"menu",0,stopped);
       await yieldLoading();
       await this.render.renderer?.compileAsync(this.render.scene,this.render.camera);
-      this.render.renderer?.render(this.render.scene,this.render.camera);
+      this.render.render(this.car.root); // Warm post-processing before play, not on the first drive frame.
       loadingProgress("shaders",1);
       this.ui.root.inert=true;
       this.setState("menu");
@@ -332,6 +333,7 @@ export class Game {
     if (state === "garage" && this.state!=="workshop") this.garagePrevious = this.state;
     this.previous = this.state;
     this.state = state;
+    this.save.background=state==='drive';
     if(state!=='drive'){this.slipstream.reset();if(this.vehicle)this.vehicle.slipstreamStrength=0;}
     if(state!=='drive')this.playerContacts?.clear();
     if(this.foot)this.ui.footStatus(this.foot.active,this.foot.active&&this.foot.canEnter(this.vehicle));
@@ -368,7 +370,7 @@ export class Game {
       await this.world.prime(this.vehicle.position);this.syncCar(1);
       this.render.updateAtmosphere(this.elapsed,this.vehicle.position);
       this.camera.update(0,this.vehicle,this.car.root,"drive",this.elapsed,stopped);
-      this.render.renderer?.render(this.render.scene,this.render.camera);
+      this.render.render(this.car.root); // Warm post-processing before play, not on the first drive frame.
     }finally{this.preparingWorld=false;}
   }
   async action(action: string) {
@@ -788,7 +790,7 @@ export class Game {
       this.saveClock += dt;
       if (this.saveClock > 10) {
         this.saveClock = 0;
-        this.persist();
+        this.persist(true);
       }
       if (this.race.finished && !this.resultShown) {
         this.resultShown = true;
@@ -874,16 +876,9 @@ export class Game {
     this.diagnostics.record(elapsedFrame*1000,this.physicsMs,performance.now()-renderStart,performance.now()-cpuStart);
     requestAnimationFrame(this.nextFrame);
   }
-  persist() {
+  persist(checkpoint=false) {
     if (!this.vehicle) return;
-    this.save.distance = this.vehicle.distance;
-    this.save.position = {
-      x: this.vehicle.position.x,
-      y: this.vehicle.position.y,
-      z: this.vehicle.position.z,
-      yaw: Math.atan2(-this.vehicle.forward.x, -this.vehicle.forward.z),
-    };
-    this.save.save();
+    this.save.savePosition(this.vehicle,checkpoint);
   }
   updateNetwork(now:number,dt:number) {
     const visible=['drive','pause','map','photo','results','multiplayer'].includes(this.state);

@@ -19,7 +19,6 @@ export class RenderSystem {
   ao?: SSAOPass;
   clouds = cloudLayer();
   pmrem?: T.PMREMGenerator;
-  reflectionEnv?: T.WebGLRenderTarget;
   fxaa?: ShaderPass;
   grade?: ShaderPass;
   sky = new Sky();
@@ -30,14 +29,14 @@ export class RenderSystem {
   studio = new T.Group();
   night = 0;
   exposure = 0.95;
-  frame = 0;
   resolutionScale=1;
   private resolutionClock=0;
   private frameAverage=1/60;
-  private basePixelRatio=1;
   private effectsReduced=false;
-  private recoveryClock=0;
+  private shadowFrame=0;
+  private stalledFrames=0;
   private applyEffects(){
+    if(this.renderer)this.renderer.shadowMap.autoUpdate=!this.effectsReduced;
     const enabled=["high","ultra"].includes(this.settings.quality)&&!this.effectsReduced;
     if(this.ao)this.ao.enabled=enabled;
     if(this.bloom)this.bloom.enabled=enabled;
@@ -49,29 +48,20 @@ export class RenderSystem {
     this.grade.uniforms.sharpness.value=clamp(.12+(1-ratio)*.3,.06,.22);
   }
   adaptResolution(dt:number,driving:boolean){
-    if(!this.renderer||!driving||dt<=0||dt>.25||document.hidden)return;
+    if(!this.renderer||!driving||dt<=0||document.hidden){this.stalledFrames=0;return;}
+    // Ignore isolated loading/tab stalls, but respond to sustained very slow drawing.
+    if(dt>.25){
+      if(++this.stalledFrames>=3&&this.settings.adaptiveResolution&&!this.effectsReduced){this.effectsReduced=true;this.applyEffects();}
+      return;
+    }
+    this.stalledFrames=0;
     this.frameAverage+=(dt-this.frameAverage)*.035;this.resolutionClock+=dt;
     if(this.resolutionClock<2)return;this.resolutionClock=0;
-    let scale=this.resolutionScale;
-    if(!this.settings.adaptiveResolution){scale=1;this.effectsReduced=false;this.recoveryClock=0;this.applyEffects();}
-    else if(this.frameAverage>1/48){
-      this.recoveryClock=0;
-      // Save the expensive effects before sacrificing readability of the scene.
-      if(!this.effectsReduced&&["high","ultra"].includes(this.settings.quality)){
-        this.effectsReduced=true;this.applyEffects();this.resize();return;
-      }
-      const minimum=this.settings.quality==='very-low'?this.basePixelRatio*.85:Math.min(this.basePixelRatio,Math.max(.85,this.basePixelRatio*.7));
-      scale=Math.max(minimum/this.basePixelRatio,scale-.05);
+    // Keep buffers stable throughout play. Recover effects on explicit preset changes.
+    if(this.settings.adaptiveResolution&&this.frameAverage>1/48&&!this.effectsReduced){
+      this.effectsReduced=true;this.applyEffects();
     }
-    else if(this.frameAverage<1/58){
-      if(scale<1){scale=Math.min(1,scale+.05);this.recoveryClock=0;}
-      else if(this.effectsReduced){this.recoveryClock+=2;if(this.recoveryClock>=6){this.effectsReduced=false;this.recoveryClock=0;this.applyEffects();this.resize();}}
-    }else this.recoveryClock=0;
-    if(Math.abs(scale-this.resolutionScale)<.01)return;
-    this.resolutionScale=scale;this.renderer.setPixelRatio(this.basePixelRatio*scale);this.composer?.setPixelRatio(this.renderer.getPixelRatio());this.resize();
   }
-  probe?: T.CubeCamera;
-  probeTarget?: T.WebGLCubeRenderTarget;
   env?: T.WebGLRenderTarget;
   constructor(
     public canvas: HTMLCanvasElement,
@@ -159,6 +149,9 @@ export class RenderSystem {
       this.ao = new SSAOPass(this.scene,this.camera,1,1,12);
       this.ao.ssaoMaterial.uniforms.cameraProjectionMatrix.value=this.camera.projectionMatrix;
       this.ao.ssaoMaterial.uniforms.cameraInverseProjectionMatrix.value=this.camera.projectionMatrixInverse;
+      // EffectComposer owns pass sizing. Scale AO once, avoiding full-size/low-size churn.
+      const sizeAO=this.ao.setSize.bind(this.ao);
+      this.ao.setSize=(w,h)=>{const scale=this.settings.quality==='ultra'?1:.65;sizeAO(Math.max(1,Math.floor(w*scale)),Math.max(1,Math.floor(h*scale)));};
       this.ao.kernelRadius=4;
       this.ao.minDistance=.0002;
       this.ao.maxDistance=.015;
@@ -182,13 +175,6 @@ export class RenderSystem {
       this.composer.addPass(new OutputPass());
       this.fxaa = new ShaderPass(FXAAShader);
       this.composer.addPass(this.fxaa);
-      this.probeTarget = new T.WebGLCubeRenderTarget(128, {
-        type: T.HalfFloatType,
-        generateMipmaps: true,
-        minFilter: T.LinearMipmapLinearFilter,
-      });
-      this.probe = new T.CubeCamera(0.3, 900, this.probeTarget);
-      this.scene.add(this.probe);
     }
     this.applyQuality();
     this.updateAtmosphere(0, new T.Vector3());
@@ -208,11 +194,11 @@ export class RenderSystem {
     this.renderer.setPixelRatio(
       Math.min(
         devicePixelRatio,
-        { 'very-low': 0.5, low: 1, medium: 1, high: 1.5, ultra: 2 }[this.settings.quality],
+        { 'very-low': 0.5, low: 1, medium: 1.25, high: 2, ultra: 2 }[this.settings.quality],
       ),
     );
-    this.basePixelRatio=this.renderer.getPixelRatio();this.resolutionScale=1;
-    this.effectsReduced=false;this.recoveryClock=0;this.resolutionClock=0;this.frameAverage=1/60;
+    this.resolutionScale=1;
+    this.effectsReduced=false;this.shadowFrame=0;this.stalledFrames=0;this.resolutionClock=0;this.frameAverage=1/60;
     this.applyEffects();
     if (this.composer) {
       this.composer.setPixelRatio(this.renderer.getPixelRatio());
@@ -230,7 +216,6 @@ export class RenderSystem {
     this.camera.updateProjectionMatrix();
     this.renderer?.setSize(w, h, false);
     this.composer?.setSize(w, h);
-    if(this.ao&&this.renderer){const scale=this.ao.enabled?(this.settings.quality==="ultra"?1:.65):0;this.ao.setSize(Math.max(1,Math.floor(w*this.renderer.getPixelRatio()*scale)),Math.max(1,Math.floor(h*this.renderer.getPixelRatio()*scale)));}
     if (this.fxaa && this.renderer) {
       const p = this.renderer.getPixelRatio();
       this.fxaa.material.uniforms.resolution.value.set(
@@ -294,25 +279,11 @@ export class RenderSystem {
     this.scene.environmentIntensity = 0.65;
 
   }
-  render(hero: T.Object3D, garage = false, stationary = false) {
+  render(_hero: T.Object3D, _garage = false, _stationary = false) {
     if (!this.renderer) return;
     this.renderer.toneMappingExposure = this.exposure;
-    if (
-      stationary && !this.effectsReduced && this.probe &&
-      this.frame++ % (this.settings.quality === "ultra" ? 120 : 240) === 0 &&
-      ["high", "ultra"].includes(this.settings.quality)
-    ) {
-      const visible = hero.visible;
-      hero.visible = false;
-      this.probe.position.copy(hero.position).add(new T.Vector3(0, 1.3, 0));
-      this.renderer.shadowMap.autoUpdate = false;
-      this.probe.update(this.renderer, this.scene);
-      this.renderer.shadowMap.autoUpdate = true;
-      hero.visible = visible;
-      this.reflectionEnv=this.pmrem!.fromCubemap(this.probeTarget!.texture,this.reflectionEnv);
-      this.scene.environment = this.reflectionEnv.texture;
-      this.scene.environmentIntensity = garage ? 1 : lerp(.78,.1,this.night);
-    }
+    // Updating shadow maps at half rate saves work without reallocating image buffers.
+    if(this.effectsReduced)this.renderer.shadowMap.needsUpdate=this.shadowFrame++%2===0;
     if (this.settings.quality === "low" || this.settings.quality === "very-low")
       this.renderer.render(this.scene, this.camera);
     else this.composer!.render();
