@@ -78,15 +78,23 @@ export class UI {
     this.root.innerHTML = `
  <div id="vignette"></div><div id="toast" role="status"></div>
  <section data-panel="loading" class="world-loading"><img src="${logo}" alt="Redline Horizon"><p id="loading-text" class="screen-reader-only">Loading</p></section>
- <section data-panel="menu" class="menu-panel">
-   <h1 class="wordmark">REDLINE<span>HORIZON</span></h1>
-   
-   <div class="mode-cards">
-     <button data-action="drive" class="mode-card open-card"><svg class="mode-icon" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="29"/><path d="M51 24 45 45 24 53 31 31Z M40 5v9 M40 66v9 M5 40h9 M66 40h9"/></svg><span class="mode-name">Open<br>World <b>↗</b></span></button>
-     <button data-action="race" class="mode-card race-card"><svg class="mode-icon" viewBox="0 0 80 80" aria-hidden="true"><path d="M20 70V13h44v32H20"/><path class="flag-fill" d="M21 14h10v10H21Zm20 0h10v10H41Zm10 10h12v10H51Zm-20 0h10v10H31ZM21 34h10v10H21Zm20 0h10v10H41Z"/></svg><span class="mode-name">Race <b>→</b></span></button>
+ <section data-panel="menu" class="menu-panel home-menu">
+   <div class="home-sidebar">
+     <h1 class="wordmark">REDLINE<span>HORIZON</span></h1>
+     <nav class="home-actions" aria-label="Play and customise">
+       <button data-action="drive" class="home-link home-default"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="14"/><path d="m26 11-4 12-13 5 5-13Z"/></svg><span>OPEN WORLD</span><b aria-hidden="true">↗</b></button>
+       <button data-action="race" class="home-link"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M9 36V6h25v20H9m0-10h25M21 6v20"/></svg><span>RACE</span><b aria-hidden="true">↗</b></button>
+       <button data-action="mp-open" class="home-link"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="15" cy="13" r="6"/><path d="M4 34v-5a11 11 0 0 1 22 0v5m0-28a6 6 0 0 1 0 12m3 5a9 9 0 0 1 7 9v2"/></svg><span>MULTIPLAYER</span><b aria-hidden="true">↗</b></button>
+       <button data-action="garage" class="home-link"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="m4 14 16-9 16 9v21H4Zm5 21V18h22v17M9 24h22M9 29h22"/></svg><span>GARAGE</span><b aria-hidden="true">↗</b></button>
+       <button data-action="settings" class="home-link"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M7 5v30M20 5v30M33 5v30M3 13h8m5 14h8m5-10h8"/></svg><span>SETTINGS</span><b aria-hidden="true">↗</b></button>
+     </nav>
+     <nav class="main-nav home-secondary" aria-label="More options">${button("activities", "ROUTES & PRACTICE")}${button("statistics", "STATISTICS")}${button("leaderboard", "LAP TIMES")}${button("continue", "CONTINUE", "continue")}</nav>
    </div>
-   <nav class="main-nav">${button("garage", "GARAGE <span>↗</span>")}${button("settings", "SETTINGS")}${button("activities", "ROUTES & PRACTICE")}${button("statistics", "STATISTICS")}${button("leaderboard", "LAP TIMES")}${button("continue", "CONTINUE", "continue")}</nav>
-   
+   <div class="home-features" aria-label="Quick access">
+     <button data-action="garage" class="home-feature home-ride"><svg class="home-car-art" viewBox="0 0 200 80" aria-hidden="true"><path d="m12 51 15-9 31-5 24-22h49l29 23 22 10 3 17H13Z"/><path d="m68 37 19-16h37l20 16ZM18 51h32m111 0h20"/><circle cx="49" cy="62" r="11"/><circle cx="153" cy="62" r="11"/></svg><svg class="home-bike-art" viewBox="0 0 200 80" aria-hidden="true"><circle cx="49" cy="59" r="20"/><circle cx="153" cy="59" r="20"/><path d="m49 59 27-32 29 32H49m27-32h52l25 32m-29-32-9-17h24M70 20h27m8 39 24-32"/></svg><span>YOUR VEHICLE</span><strong id="home-car-name">VANTA R1</strong><b aria-hidden="true">↗</b></button>
+     <button data-action="activities" class="home-feature home-routes"><svg viewBox="0 0 200 80" aria-hidden="true"><path d="M-10 68c50-5 87-31 112-29s-12-18 17-21 34 1 90-11"/><path d="m34 70 22-34 20 18 25-42 40 51"/></svg><span>EXPLORE THE MAP</span><strong>ROUTES & PRACTICE</strong><b aria-hidden="true">↗</b></button>
+     <button data-action="leaderboard" class="home-feature home-times"><svg viewBox="0 0 200 80" aria-hidden="true"><circle cx="100" cy="44" r="28"/><path d="M88 6h24M100 6v10m0 6v23l13 8m11-31 9-9"/></svg><span>PERSONAL BESTS</span><strong>LAP TIMES</strong><b aria-hidden="true">↗</b></button>
+   </div>
  </section>
  <section data-panel="activities" class="overlay" hidden><div class="panel activities-panel"><div class="panel-head"><h2>Routes & practice</h2>${button("back","← BACK","text-button")}</div><h3>RACE ROUTES</h3><div id="race-routes" class="activity-grid"></div><h3>PRACTICE SECTIONS</h3><p class="muted">No timer, traffic or police. Restart the section at any time.</p><div id="practice-sections" class="activity-grid"></div></div></section>
  <div id="edition">${wallet()}</div>
@@ -220,6 +228,8 @@ export class UI {
     this.root.querySelectorAll(".coin-balance").forEach(el=>el.textContent=balance);
     this.root.querySelectorAll(".wallet").forEach(el=>el.setAttribute("aria-label",this.save.unlimitedCoins?"Unlimited coins":`${balance} coins`));
     const car=this.save.car,tune=setupTune(tuneFor(this.save.loadout),this.save.setup),estimate=performanceEstimate(car,tune);
+    document.getElementById("home-car-name")!.textContent=car.name;
+    const ride=this.root.querySelector<HTMLElement>(".home-ride")!;ride.style.setProperty("--ride-color",car.color);ride.classList.toggle("is-bike",isBike(car));
     document.getElementById("garage-car-name")!.textContent=car.name;
     document.getElementById("garage-spec")!.innerHTML=`<div><strong>${Math.round(620*car.power*tune.enginePower*chassisFor(car).forceScale)}</strong><span>Nm TORQUE</span></div><div><strong>${Math.round((car.topSpeed+tune.engineSpeed+tune.gearingSpeed)*3.6)}</strong><span>km/h TOP SPEED</span></div><div><strong>${Math.round(car.handling*100)}</strong><span>GRIP</span></div><div><strong>${estimate.acceleration.toFixed(1)} s</strong><span>0–100 KM/H · EST.</span></div><div><strong>${Math.round(estimate.braking)} m</strong><span>100–0 KM/H · EST.</span></div><div><strong>${estimate.mass} kg</strong><span>${estimate.drive}</span></div><p class="vehicle-character">${estimate.label}</p>`;
     document.getElementById("car-shop")!.innerHTML=CARS.map((c,i)=>{
