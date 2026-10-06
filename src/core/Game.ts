@@ -245,7 +245,6 @@ export class Game {
         this.traffic.root,
         this.race.ai.root,
         this.race.gate,
-        this.race.marker,
         this.race.finish,
       );
       this.particles = new Particles();
@@ -352,7 +351,6 @@ export class Game {
     this.traffic.root.visible = !garage&&!this.practice;
     this.race.ai.root.visible =
       !garage && !this.race.networkRace && (this.race.active || this.race.finished);
-    this.race.marker.visible = !garage && !this.race.active&&!this.practice;
     this.race.gate.visible = !garage && this.race.active;
     this.race.finish.visible = !garage && (this.race.active||this.race.finished);
     this.particles.root.visible = !garage;

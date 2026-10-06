@@ -62,7 +62,6 @@ export class RaceManager {
   startDistance = 120;
   ai: TrafficManager;
   gate = new T.Group();
-  marker = new T.Group();
   progress: number[] = [];
   resultTime = 0;
   rewardEarned=0;
@@ -96,19 +95,6 @@ export class RaceManager {
       flag.position.set(s * 7.6, 3.5, 0);
       this.gate.add(flag);
     }
-    const ring = new T.Mesh(
-      new T.TorusGeometry(2.7, 0.08, 8, 50),
-      new T.MeshBasicMaterial({
-        color: "#fa3046",
-        transparent: true,
-        opacity: 0.65,
-      }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    this.marker.add(ring);
-    const a = roads.at(roads.main, 95);
-    this.marker.position.copy(a.p).addScaledVector(a.r, 5.5);
-    this.marker.position.y += 0.12;
     this.gate.visible = false;
     // A persistent start/finish gantry and road stripe, with no invisible collider.
     const black=new T.MeshStandardMaterial({color:0x141a23}),white=new T.MeshStandardMaterial({color:0xf2eee1});
@@ -170,7 +156,6 @@ export class RaceManager {
     this.gate.visible = true;
   }
   update(dt: number, car: VehiclePhysics) {
-    this.marker.rotation.y += dt * 0.3;
     if (!this.active) return;
     if(!this.networkRace)this.countdown -= dt;
     if (this.countdown > 0) return;
