@@ -7,7 +7,7 @@ export class DevPanel {
   private content:HTMLElement;
   private error:HTMLElement;
   constructor(root:HTMLElement,private dev:DevTools){
-    root.querySelector('.main-nav')!.insertAdjacentHTML('beforeend','<button data-action="dev-open">DEV PANEL</button>');
+    root.querySelector('.home-actions')!.insertAdjacentHTML('beforeend','<button data-action="dev-open" class="home-link"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M5 8h30v24H5Zm4 7 6 5-6 5m10 0h10"/></svg><span>DEV PANEL</span><b aria-hidden="true">↗</b></button>');
     root.insertAdjacentHTML('beforeend',`<section data-panel="dev" class="overlay" hidden>
       <div class="panel dev-panel" role="dialog" aria-modal="true" aria-labelledby="dev-title">
         <div class="panel-head"><h2 id="dev-title">Dev panel</h2><button data-action="dev-close" class="text-button">← BACK</button></div>

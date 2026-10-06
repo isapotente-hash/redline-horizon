@@ -41,9 +41,10 @@ export type State =
 const validPreview=(id:string)=>RACE_ROUTES.find(r=>r.id===id)?.id||'horizon';
 const button = (action: string, label: string, cls = "") =>
   `<button data-action="${action}" class="${cls}">${label}</button>`;
-// Vector coin keeps the HUD sharp without another texture or network request.
+const compactCoins = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
+// Flat stamped token: the two racing stripes are the wallet's Redline mark.
 const wallet = (hud = false) => `<div class="wallet${hud ? ' hud-wallet' : ''}" role="group" aria-label="Coin balance">
-  <svg class="coin-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#96631e" stroke="#ffe6a0" stroke-width="1.5"/><circle cx="24" cy="23" r="19" fill="#e9b957"/><circle cx="24" cy="23" r="16" fill="#c38b32" stroke="#ffe09a"/><path d="M15 14h16l4 5-4 7h-5l7 8h-9l-7-8-3 8h-7l7-17h15l-2 4H15Z" fill="#fff0bd" transform="translate(3 0) scale(.88 1)"/><path d="M9 18A17 17 0 0 1 29 7" fill="none" stroke="#fff2bc" stroke-width="2" stroke-linecap="round"/></svg>
+  <svg class="coin-icon" viewBox="0 0 32 32" aria-hidden="true"><path class="token-rim" d="M9 2h14l7 7v14l-7 7H9l-7-7V9Z"/><path class="token-stripes" d="M12 9h5l-5 14H7Zm9 0h5l-5 14h-5Z"/></svg>
   <div class="coin-copy"><span class="coin-label">COINS</span><b class="coin-balance">0</b></div>
 </div>`;
 export class UI {
@@ -225,7 +226,9 @@ export class UI {
     const key=`${this.save.unlimitedCoins}:${this.save.coins}:${this.save.selectedCar}:${[...this.save.ownedCars].join()}:${JSON.stringify(this.save.loadout)}`;
     if(key===this.economyKey)return;this.economyKey=key;
     const balance=this.save.unlimitedCoins?"∞":this.save.coins.toLocaleString();
-    this.root.querySelectorAll(".coin-balance").forEach(el=>el.textContent=balance);
+    this.root.querySelectorAll(".coin-balance").forEach(el=>el.textContent=
+      this.mobile&&!this.save.unlimitedCoins&&this.save.coins>=1_000_000&&el.closest('#edition,.hud-wallet')
+        ? compactCoins.format(this.save.coins) : balance);
     this.root.querySelectorAll(".wallet").forEach(el=>el.setAttribute("aria-label",this.save.unlimitedCoins?"Unlimited coins":`${balance} coins`));
     const car=this.save.car,tune=setupTune(tuneFor(this.save.loadout),this.save.setup),estimate=performanceEstimate(car,tune);
     document.getElementById("home-car-name")!.textContent=car.name;
