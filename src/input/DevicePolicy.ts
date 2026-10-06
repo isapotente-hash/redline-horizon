@@ -9,9 +9,14 @@ export function isMobileDevice(d:DeviceInfo):boolean {
   if(/MacIntel/i.test(d.platform)&&/Macintosh/i.test(ua)&&d.maxTouchPoints>1&&d.coarse)return true;
   return d.mobileHint===true&&!/Mac|Linux|X11/i.test(ua+' '+platform);
 }
-export function mobileDevice():boolean {
+export function physicalMobileDevice():boolean {
   const n=navigator as Navigator&{userAgentData?:{mobile:boolean;platform:string}};
   return isMobileDevice({userAgent:n.userAgent||'',platform:n.platform||'',maxTouchPoints:n.maxTouchPoints||0,
     touchSupported:n.maxTouchPoints>0||'ontouchstart' in window,coarse:matchMedia('(pointer: coarse)').matches,
     mobileHint:n.userAgentData?.mobile,platformHint:n.userAgentData?.platform});
 }
+/** The developer preview has a real laptop viewport and uses desktop presentation. */
+export function desktopPreview():boolean {
+  return physicalMobileDevice()&&window.parent!==window&&new URL(location.href).searchParams.get('dev-view')==='desktop-frame';
+}
+export function mobileDevice():boolean {return physicalMobileDevice()&&!desktopPreview();}

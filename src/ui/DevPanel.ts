@@ -1,4 +1,6 @@
 import {DevTools} from '../core/DevTools';
+import {physicalMobileDevice,desktopPreview} from '../input/DevicePolicy';
+import {switchDeveloperView} from './DesktopView';
 
 export class DevPanel {
   private panel:HTMLElement;
@@ -24,6 +26,7 @@ export class DevPanel {
             </section>
             <section><h3>GARAGE</h3><div class="stack"><button data-cheat="unlock-all" class="primary">UNLOCK EVERYTHING</button><button data-cheat="unlock-cars">ALL VEHICLES</button><button data-cheat="unlock-upgrades">ALL UPGRADES</button><button data-cheat="max-power">FIT MAX POWER</button></div></section>
             <section><h3>DRIVING</h3><label class="dev-toggle"><span>Unlimited boost</span><input id="dev-boost" type="checkbox" data-dev-toggle="boost"></label><label class="dev-toggle"><span>Disable police</span><input id="dev-police" type="checkbox" data-dev-toggle="no-police"></label><button data-cheat="reset-car">RESET CAR & CLEAR WANTED</button></section>
+            ${physicalMobileDevice()?`<section><h3>DISPLAY</h3><div class="stack"><button id="dev-desktop-view" aria-pressed="${desktopPreview()}">${desktopPreview()?'RETURN TO MOBILE VIEW':'VIEW AS DESKTOP'}</button></div><p class="dev-hint">Full laptop layout, fitted to your screen.</p></section>`:''}
             <section><h3>SESSION</h3><div class="stack"><button data-cheat="disable">TURN OFF CHEAT TOGGLES</button><button id="dev-lock">LOCK PANEL</button></div><p class="dev-hint">Coins & unlocks save. Toggles reset on reload.</p></section>
           </div>
           <p id="dev-status" role="status" aria-live="polite"></p>
@@ -50,6 +53,7 @@ export class DevPanel {
     });
     this.panel.addEventListener('change',e=>{const input=e.target as HTMLInputElement;if(input.dataset.devToggle)this.run(input.dataset.devToggle,input.checked);});
     this.panel.querySelector('#dev-lock')!.addEventListener('click',()=>{this.lock();this.focus();});
+    this.panel.querySelector('#dev-desktop-view')?.addEventListener('click',()=>{if(this.content.hidden)return;this.dev.save.save();switchDeveloperView();});
     this.panel.addEventListener('keydown',e=>{
       e.stopPropagation();
       if(e.key==='Escape'){e.preventDefault();e.stopPropagation();this.panel.querySelector<HTMLButtonElement>('[data-action="dev-close"]')!.click();}
