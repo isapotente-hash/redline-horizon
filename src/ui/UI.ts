@@ -46,6 +46,18 @@ const compactCoins = new Intl.NumberFormat(undefined, { notation: "compact", max
 const wallet = (hud = false) => `<div class="wallet${hud ? ' hud-wallet' : ''}" role="group" aria-label="Coin balance">
   <div class="coin-copy"><span class="coin-prefix" aria-hidden="true">+</span><b class="coin-balance">0</b></div>
 </div>`;
+const homeVehicleImages:Record<string,string>={
+  vanta:new URL('../../assets/ui/home/vanta.webp',import.meta.url).href,
+  kestrel:new URL('../../assets/ui/home/kestrel.webp',import.meta.url).href,
+  apex:new URL('../../assets/ui/home/apex.webp',import.meta.url).href,
+  pulse:new URL('../../assets/ui/home/pulse.webp',import.meta.url).href,
+  spectre:new URL('../../assets/ui/home/spectre.webp',import.meta.url).href,
+  atlas:new URL('../../assets/ui/home/atlas.webp',import.meta.url).href,
+  comet:new URL('../../assets/ui/home/comet.webp',import.meta.url).href,
+  revuelto:new URL('../../assets/ui/home/revuelto.webp',import.meta.url).href,
+};
+const homeRouteImage=new URL('../../assets/ui/home/routes.webp',import.meta.url).href;
+const homeLapImage=new URL('../../assets/ui/home/lap-times.webp',import.meta.url).href;
 export class UI {
   private mobile=false;
   private walkingTouch?: WalkingTouchControls;
@@ -91,9 +103,9 @@ export class UI {
      <nav class="main-nav home-secondary" aria-label="More options">${button("activities", "ROUTES & PRACTICE")}${button("statistics", "STATISTICS")}${button("leaderboard", "LAP TIMES")}${button("continue", "CONTINUE", "continue")}</nav>
    </div>
    <div class="home-features" aria-label="Quick access">
-     <button data-action="garage" class="home-feature home-ride"><svg class="home-car-art" viewBox="0 0 200 80" aria-hidden="true"><path d="m12 51 15-9 31-5 24-22h49l29 23 22 10 3 17H13Z"/><path d="m68 37 19-16h37l20 16ZM18 51h32m111 0h20"/><circle cx="49" cy="62" r="11"/><circle cx="153" cy="62" r="11"/></svg><svg class="home-bike-art" viewBox="0 0 200 80" aria-hidden="true"><circle cx="49" cy="59" r="20"/><circle cx="153" cy="59" r="20"/><path d="m49 59 27-32 29 32H49m27-32h52l25 32m-29-32-9-17h24M70 20h27m8 39 24-32"/></svg><span>YOUR VEHICLE</span><strong id="home-car-name">VANTA R1</strong><b aria-hidden="true">↗</b></button>
-     <button data-action="activities" class="home-feature home-routes"><svg viewBox="0 0 200 80" aria-hidden="true"><path d="M-10 68c50-5 87-31 112-29s-12-18 17-21 34 1 90-11"/><path d="m34 70 22-34 20 18 25-42 40 51"/></svg><span>EXPLORE THE MAP</span><strong>ROUTES & PRACTICE</strong><b aria-hidden="true">↗</b></button>
-     <button data-action="leaderboard" class="home-feature home-times"><svg viewBox="0 0 200 80" aria-hidden="true"><circle cx="100" cy="44" r="28"/><path d="M88 6h24M100 6v10m0 6v23l13 8m11-31 9-9"/></svg><span>PERSONAL BESTS</span><strong>LAP TIMES</strong><b aria-hidden="true">↗</b></button>
+     <button data-action="garage" class="home-feature home-ride"><img id="home-car-image" src="${homeVehicleImages.vanta}" alt="VANTA R1" decoding="async"><span>YOUR VEHICLE</span><strong id="home-car-name">VANTA R1</strong><b aria-hidden="true">↗</b></button>
+     <button data-action="activities" class="home-feature home-routes"><img src="${homeRouteImage}" alt="A winding road through the game’s hills" decoding="async"><span>EXPLORE THE MAP</span><strong>ROUTES & PRACTICE</strong><b aria-hidden="true">↗</b></button>
+     <button data-action="leaderboard" class="home-feature home-times"><img src="${homeLapImage}" alt="The game’s circuit starting grid" decoding="async"><span>PERSONAL BESTS</span><strong>LAP TIMES</strong><b aria-hidden="true">↗</b></button>
    </div>
  </section>
  <section data-panel="activities" class="overlay" hidden><div class="panel activities-panel"><div class="panel-head"><h2>Routes & practice</h2>${button("back","← BACK","text-button")}</div><h3>RACE ROUTES</h3><div id="race-routes" class="activity-grid"></div><h3>PRACTICE SECTIONS</h3><p class="muted">No timer, traffic or police. Restart the section at any time.</p><div id="practice-sections" class="activity-grid"></div></div></section>
@@ -231,7 +243,8 @@ export class UI {
     this.root.querySelectorAll(".wallet").forEach(el=>el.setAttribute("aria-label",this.save.unlimitedCoins?"Unlimited coins":`${this.save.coins.toLocaleString()} coins`));
     const car=this.save.car,tune=setupTune(tuneFor(this.save.loadout),this.save.setup),estimate=performanceEstimate(car,tune);
     document.getElementById("home-car-name")!.textContent=car.name;
-    const ride=this.root.querySelector<HTMLElement>(".home-ride")!;ride.style.setProperty("--ride-color",car.color);ride.classList.toggle("is-bike",isBike(car));
+    const ride=this.root.querySelector<HTMLElement>(".home-ride")!;ride.classList.toggle("is-bike",isBike(car));
+    const image=this.root.querySelector<HTMLImageElement>("#home-car-image")!;if(image.dataset.vehicle!==car.id){image.src=homeVehicleImages[car.id];image.alt=car.name;image.dataset.vehicle=car.id;}
     document.getElementById("garage-car-name")!.textContent=car.name;
     document.getElementById("garage-spec")!.innerHTML=`<div><strong>${Math.round(620*car.power*tune.enginePower*chassisFor(car).forceScale)}</strong><span>Nm TORQUE</span></div><div><strong>${Math.round((car.topSpeed+tune.engineSpeed+tune.gearingSpeed)*3.6)}</strong><span>km/h TOP SPEED</span></div><div><strong>${Math.round(car.handling*100)}</strong><span>GRIP</span></div><div><strong>${estimate.acceleration.toFixed(1)} s</strong><span>0–100 KM/H · EST.</span></div><div><strong>${Math.round(estimate.braking)} m</strong><span>100–0 KM/H · EST.</span></div><div><strong>${estimate.mass} kg</strong><span>${estimate.drive}</span></div><p class="vehicle-character">${estimate.label}</p>`;
     document.getElementById("car-shop")!.innerHTML=CARS.map((c,i)=>{

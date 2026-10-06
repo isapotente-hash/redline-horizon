@@ -31,6 +31,9 @@
     </style>
     <div id="startup" role="status" aria-label="Loading Redline Horizon"><div class="startup-content"><img src="./redline-logo.png" alt="Redline Horizon" fetchpriority="high"><div class="startup-progress"><progress id="startup-bar" max="100" value="0" aria-label="Loading progress"></progress><div class="startup-track" aria-hidden="true"><div id="startup-fill"></div></div><div class="startup-caption" aria-hidden="true">LOADING……<span id="startup-percent">0%</span></div></div></div></div>
     <main id="ui" aria-busy="true"></main>
+    <script>
+      addEventListener('error',e=>{if(e.target?.tagName!=='SCRIPT'||e.target.type!=='module')return;const s=document.getElementById('startup');if(!s)return;s.innerHTML='<div style="text-align:center"><p>Couldn’t load the game. Check your connection and try again.</p><button style="padding:12px 24px;color:white;background:#176da1">RETRY</button></div>';s.querySelector('button').onclick=()=>{const u=new URL(location.href);u.searchParams.set('retry',Date.now());location.replace(u.href);};},true);
+    </script>
     <script type="module" src="../src/main.ts"></script>
   </body>
 </html>
