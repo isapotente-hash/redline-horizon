@@ -2,6 +2,9 @@ import {readFile,writeFile,copyFile,mkdir,rm} from 'node:fs/promises';
 import path from 'node:path';
 const root=path.resolve(import.meta.dirname,'..');
 const manifest=JSON.parse(await readFile(path.join(root,'dist/.vite/manifest.json'),'utf8'));
+const entry=manifest['index.html'],html=await readFile(path.join(root,'dist/index.html'),'utf8');
+if(!entry?.isEntry||!html.includes(`src="./${entry.file}"`)||!(entry.css||[]).every(file=>html.includes(`href="./${file}"`)))
+ throw new Error('Built entry page references stale bundles. Clean dist and rebuild before publishing.');
 const files=new Set(['index.html','favicon.svg','redline-logo.png']);
 for(const entry of Object.values(manifest)){
  files.add(entry.file);
