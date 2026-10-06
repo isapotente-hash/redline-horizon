@@ -999,7 +999,6 @@ label output {
 
 #boost-status { color: #65f4ff; font-size: 18px; font-weight: 800; letter-spacing: .08em; text-shadow: 0 0 18px #00bfdc; margin-top: 10px; }
 
-#autopilot-toggle[aria-pressed="true"] { color: #84fbff; background: #16464d; border-color: #39dbe6; }
 .workshop-entry {width:100%;padding:13px 16px;margin:0 0 20px;background:#b4e7c9;color:#16241d;text-align:left;font-size:11px;font-weight:700;}
 .workshop-entry:hover {background:#e2f9ea;}
 .workshop-panel {width:1100px;background:#111719f5;}
@@ -1027,7 +1026,7 @@ label output {
 .reward-note {color:#b4e7c9;font-weight:700;}
 .mileage-progress {font-size:10px;color:#c5dfd1;max-width:110px;line-height:1.5;}
 @media(max-width:800px){.upgrade-shop{grid-template-columns:1fr;gap:17px;}.workshop-panel{max-width:95vw;}.topbar{gap:15px;}.topbar nav{flex-wrap:wrap;justify-content:flex-end;}}
-@media (max-width: 680px) { .topbar nav { flex-wrap: wrap; justify-content: flex-end; gap: 4px; } #autopilot-toggle { font-size: 12px; padding: 8px; } }
+@media (max-width: 680px) { .topbar nav { flex-wrap: wrap; justify-content: flex-end; gap: 4px; } }
 
 /* Coastline Edition 02: asymmetric game front end, live car visible on the right. */
 :root { --accent: #ff3c55; --mint: #a9edd1; }
@@ -1155,7 +1154,7 @@ label output {
 #route-options small{grid-column:2;font-size:8px;line-height:12px;opacity:.7}
 #route-options .key{padding:1px 4px;font-size:9px;align-self:start}
 #route-hint{font-size:9px;margin:7px 0 0}
-.on-foot .instruments,.on-foot #race-hud,.on-foot #autopilot-toggle,.on-foot .minimap,.on-foot #law-hud{display:none!important}
+.on-foot .instruments,.on-foot #race-hud,.on-foot .minimap,.on-foot #law-hud{display:none!important}
 @media(max-width:700px){#route-choice{left:10px;top:160px;width:185px;max-width:40vw;padding:8px}#route-options button{padding:6px}#route-options b{font-size:11px}}
 
 /* Transient driving feedback sits outside the reference dial. */
@@ -1223,7 +1222,6 @@ label output {
     white-space:nowrap;
     border-radius:5px;
   }
-  .mobile-device .drive-ui .topbar #autopilot-toggle {font-size:clamp(8px,2.3vw,10px);padding:8px 4px}
   .mobile-device .drive-ui .topbar .key,
   .mobile-device .drive-ui .topbar .desktop-action {display:none}
   .mobile-device .drive-ui .topbar .mobile-action {display:inline}
@@ -1307,7 +1305,6 @@ label output {
     margin-right:140px;
   }
   .mobile-device .drive-ui .topbar button {grid-row:1;font-size:9px}
-  .mobile-device .drive-ui .topbar #autopilot-toggle {font-size:9px}
   .mobile-device .drive-ui .topbar .hud-wallet {position:absolute;top:5px;left:auto;right:0;transform:none;max-width:128px}
   .mobile-device #coin-reward {top:calc(var(--hud-top) + 48px)}
   .mobile-device .drive-ui #mp-hud {top:var(--hud-info-top);left:auto;right:var(--hud-right);max-width:180px}
@@ -1554,3 +1551,56 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
  .mobile-device .drive-ui #race-hud>div:nth-child(2),.mobile-device .drive-ui #race-hud>div:nth-child(4){min-height:24px;padding-block:2px}
  .mobile-device .drive-ui:has(#race-hud[style*="flex"]) .minimap{width:72px;height:72px}
 }
+
+/* Approved driving control strip: keyboard hints on desktop, safe touch rows on mobile. */
+.drive-ui .driving-bar{top:max(14px,env(safe-area-inset-top,0px));left:max(14px,env(safe-area-inset-left,0px));right:max(14px,env(safe-area-inset-right,0px));display:flex;align-items:flex-start;justify-content:space-between;gap:12px;isolation:isolate}
+.drive-ui .driving-bar .driving-actions{display:flex;align-items:stretch;justify-content:flex-start;flex-wrap:nowrap;gap:0;min-width:0;margin:0;background:#171f28;border-radius:4px;box-shadow:0 3px 8px #0004}
+.drive-ui .driving-bar .toolbar-action{appearance:none;position:relative;display:flex;align-items:center;justify-content:center;flex:none;gap:7px;min-height:46px;min-width:46px;margin:0;padding:0 11px;border:0;border-radius:0;background:#171f28;color:#e3e9ef;font:700 11px Arial,sans-serif;letter-spacing:.035em;line-height:1.2;white-space:nowrap}
+.drive-ui .driving-bar .toolbar-action+.toolbar-action{border-left:1px solid #313945}
+.drive-ui .driving-bar .toolbar-action:first-child{border-radius:4px 0 0 4px}
+.drive-ui .driving-bar .toolbar-action:last-child{border-radius:0 4px 4px 0}
+.drive-ui .driving-bar .toolbar-action:hover{background:#27333e}
+.drive-ui .driving-bar .toolbar-action[aria-pressed="true"]{background:#153b40;color:#85fff1;border-color:#313945}
+.drive-ui .driving-bar .toolbar-action[aria-pressed="true"]:after{content:"";position:absolute;bottom:0;left:10px;right:10px;height:3px;background:#00e9d9}
+.drive-ui .driving-bar .toolbar-action:disabled{opacity:.5;cursor:default}
+.drive-ui .driving-bar .toolbar-action svg{width:17px;height:17px;flex-shrink:0}
+.drive-ui .driving-bar kbd{font:400 11px Arial,sans-serif;letter-spacing:0;color:#a6b2c0;line-height:19px;padding:0 4px;border:1px solid #475261;border-radius:2px;background:#222b36;margin:0}
+.drive-ui .driving-bar .toolbar-auto-copy{display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.drive-ui .driving-bar .toolbar-status{font-size:11px;font-weight:400;letter-spacing:.08em;color:#a6b2c0}
+.drive-ui .driving-bar [aria-pressed="true"] .toolbar-status{color:#85fff1}
+.drive-ui .driving-bar .toolbar-pause-label{display:none}
+.drive-ui .driving-bar .hud-wallet{position:relative;flex-shrink:0;align-self:flex-start;min-width:132px;max-width:none;width:max-content;min-height:46px;margin:0;padding:2px 9px 2px 17px;font-size:29px;letter-spacing:-.8px}
+@media(min-width:850px){.drive-ui .driving-bar .toolbar-pause-label{display:inline}}
+@media(max-width:740px){
+  html:not(.mobile-device) .drive-ui .driving-bar{flex-wrap:wrap;gap:8px}
+  html:not(.mobile-device) .drive-ui .driving-bar .hud-wallet{order:-1;margin-left:auto}
+  html:not(.mobile-device) .drive-ui .driving-bar .driving-actions{width:100%}
+  html:not(.mobile-device) .drive-ui .driving-bar .toolbar-action{flex:1;min-width:0;padding:0 7px;gap:5px}
+  html:not(.mobile-device) .drive-ui .driving-bar kbd{display:none}
+}
+@media(max-width:390px){html:not(.mobile-device) .drive-ui .driving-bar .toolbar-action{flex-direction:column;gap:4px;min-height:56px;padding:0 4px}html:not(.mobile-device) .drive-ui .driving-bar .toolbar-auto{flex:1.55}html:not(.mobile-device) .drive-ui .driving-bar .toolbar-auto-copy{align-items:center}}
+.mobile-device .drive-ui{--hud-info-top:calc(var(--hud-top) + 118px)}
+.mobile-device .drive-ui .driving-bar{top:var(--hud-top);left:var(--hud-left);right:var(--hud-right);display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr);grid-template-rows:46px 52px;gap:9px 0}
+.mobile-device .drive-ui .driving-bar .driving-actions{display:contents}
+.mobile-device .drive-ui .driving-bar .toolbar-action{min-height:52px;min-width:44px;padding:0 9px;gap:7px;font-size:11px;line-height:1.2;grid-row:2}
+.mobile-device .drive-ui .driving-bar .toolbar-action svg{width:19px;height:19px}
+.mobile-device .drive-ui .driving-bar .toolbar-exit{grid-column:1;grid-row:1;justify-self:start;min-height:46px;border:0;border-radius:4px}
+.mobile-device .drive-ui .driving-bar .toolbar-auto{grid-column:1;border:0;border-radius:4px 0 0 4px}
+.mobile-device .drive-ui .driving-bar .toolbar-photo{grid-column:2}
+.mobile-device .drive-ui .driving-bar .toolbar-map{grid-column:3;border-radius:0 4px 4px 0}
+.mobile-device .drive-ui .driving-bar .toolbar-pause{grid-column:3;grid-row:1;justify-self:end;min-height:46px;min-width:46px;border:0;border-radius:4px}
+.mobile-device .drive-ui .driving-bar kbd,.mobile-device .drive-ui .driving-bar .toolbar-pause-label{display:none}
+.mobile-device .drive-ui .driving-bar .hud-wallet{grid-column:1/-1;grid-row:1;justify-self:end;margin-right:54px;align-self:center;position:relative;inset:auto;transform:none;min-height:46px;width:max-content;min-width:132px;max-width:calc(100% - 136px);padding:2px 9px 2px 17px;font-size:32px;letter-spacing:-.8px;white-space:nowrap}
+.mobile-device #coin-reward{top:calc(var(--hud-top) + 118px)}
+@media(min-width:720px){
+  .mobile-device .drive-ui{--hud-info-top:calc(var(--hud-top) + 62px)}
+  .mobile-device .drive-ui .driving-bar{display:flex;gap:12px}
+  .mobile-device .drive-ui .driving-bar .driving-actions{display:flex;flex-wrap:nowrap;gap:0;justify-content:flex-start;margin:0}
+  .mobile-device .drive-ui .driving-bar .toolbar-action{min-height:46px;flex:none;grid-row:auto;border-left:1px solid #313945;border-radius:0}
+  .mobile-device .drive-ui .driving-bar .toolbar-action:first-child{border-left:0;border-radius:4px 0 0 4px}
+  .mobile-device .drive-ui .driving-bar .toolbar-action:last-child{border-radius:0 4px 4px 0}
+  .mobile-device .drive-ui .driving-bar .toolbar-pause-label{display:inline}
+  .mobile-device .drive-ui .driving-bar .hud-wallet{min-width:132px;max-width:none;font-size:29px;align-self:flex-start;margin-left:auto;margin-right:0}
+  .mobile-device #coin-reward{top:calc(var(--hud-top) + 62px)}
+}
+@media(prefers-reduced-motion:reduce){.drive-ui .driving-bar .toolbar-action{transition:none}}

@@ -73,9 +73,11 @@ The driving instrument follows the supplied reference: a transparent circular di
 
 ## Mobile driving HUD
 
-HUD overrides and touch listeners apply only to recognized touch-capable Android/iOS phones and tablets (including the iPadOS desktop user agent). Windows, ChromeOS, macOS and Linux desktop/laptop browsers retain desktop controls even when resized or touchscreen enabled. Viewport size alone never enables the mobile overlay. Mobile action buttons show clean labels while preserving their existing handlers and toggle states. Coins stay centered at the top; location, enforcement and route notices have separate space. The map and dial are approximately 80% of their previous mobile size, with separate steering and pedal areas below them. All driving touch buttons are at least 48 × 48 px; the bike wheelie button uses a separate row with dial clearance. Insets respect device safe areas. Mouse/keyboard layouts retain their original styling, key hints and control labels, including narrow desktop windows.
+HUD overrides and touch listeners apply only to recognized touch-capable Android/iOS phones and tablets (including the iPadOS desktop user agent). Windows, ChromeOS, macOS and Linux desktop/laptop browsers retain keyboard/mouse controls, even when resized or touchscreen enabled. Viewport size alone never enables touch controls.
 
-Validation: actual HUD rendering at 10 phone/tablet sizes in portrait and landscape, including cars, bikes, route choices, race overlays, multiplayer status, large balances, touch press/release and exit/entry labels. Four desktop viewport comparisons match the prior element bounds, font sizes and visible labels in driving, autopilot and on-foot states. Physics and engine source files are unchanged.
+The approved top bar groups Exit/Enter, Autopilot, Photo, Map and Pause in a dark control strip. Desktop shows keyboard shortcuts; portrait mobile puts Exit/Enter, the existing coin fade and Pause above Autopilot, Photo and Map. Wide mobile screens use one row. Buttons have at least 44px targets, respect safe areas, and show all three assist modes with explicit ON/OFF status. Autopilot is disabled on foot. Mode changes update labels without replacing the icons or event handlers. Five bundled Lucide SVG icons add no network requests or runtime dependency; their license is in `licenses/LUCIDE.txt`.
+
+The map, dial, steering and pedal areas retain the existing mobile layout. Walking still switches to the left joystick and right look area, and desktop keeps its WASD/mouse controls. Optional driving notices avoid the complete action bar.
 
 
 ## Personal laps, drift rewards and drafting
