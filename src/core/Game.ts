@@ -11,7 +11,7 @@ import { OnFootPlayer } from "../player/OnFootPlayer";
 import { mobileDevice } from "../input/DevicePolicy";
 import {SlipstreamSystem} from '../vehicles/SlipstreamSystem';
 import { PhysicsClock } from "./PhysicsClock";
-import {yieldLoading,finishStartup,loadingProgress} from "./Loading";
+import {yieldLoading,finishStartup,loadingProgress,stopLoadingProgress} from "./Loading";
 import {DevTools} from './DevTools';
 import {DevPanel} from '../ui/DevPanel';
 import {PlayerContacts} from '../multiplayer/PlayerContacts';
@@ -284,6 +284,7 @@ export class Game {
       this.registerTools();
       const room=inviteCode(location.href);if(room){this.multiplayer.input.value=room;this.multiplayerPrevious="menu";this.setState("multiplayer");this.ui.toast("Invite loaded — choose your vehicle and connect");}
     } catch (error) {
+      stopLoadingProgress();
       this.ui.root.inert=false;this.ui.root.setAttribute("aria-busy","false");
       document.getElementById("startup")?.remove();
       console.error(error);

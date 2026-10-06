@@ -9,28 +9,31 @@
       content="Drive the VANTA R1 through an original coastal open world."
     />
     <link rel="icon" href="./favicon.svg" />
-    <script type="module" crossorigin src="./assets/index-sn2X-qBa.js"></script>
+    <script type="module" crossorigin src="./assets/index-BpZmYN-s.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/three-eMBE34_C.js">
     <link rel="modulepreload" crossorigin href="./assets/physics-CpfVXZ1b.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-CG2LS2LS.css">
+    <link rel="stylesheet" crossorigin href="./assets/index-BYae_x1I.css">
   </head>
   <body>
     <canvas id="game" aria-label="Redline Horizon 3D driving world"></canvas>
     <style>
       html,body{margin:0;background:#000}
-      #startup{position:fixed;inset:0;background:#000;z-index:99999;display:grid;place-items:center;opacity:1;transition:opacity .6s ease;pointer-events:all}
-      #startup img{display:block;width:min(660px,80vw);max-height:76vh;object-fit:contain;opacity:0;animation:logo-in 1.8s ease-out forwards;will-change:opacity}
+      #startup{position:fixed;inset:0;background:#000;z-index:99999;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:max(16px,env(safe-area-inset-top)) max(20px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left));opacity:1;transition:opacity .6s ease;pointer-events:all}
+      .startup-content{display:flex;flex-direction:column;align-items:center;gap:clamp(16px,4vh,32px);width:min(560px,100%)}
+      #startup img{display:block;width:100%;height:auto;max-height:55vh;object-fit:contain;opacity:0;animation:logo-in 1.8s ease-out forwards;will-change:opacity}
       #startup.ready{opacity:0}
-      .startup-progress{position:absolute;top:75%;width:min(740px,86vw);padding:4px;border-radius:999px;background:linear-gradient(#faf9ed,#898b88 24%,#30312e 49%,#070806 76%,#171916);box-shadow:0 2px 3px #000,0 0 0 1px #b8b7ad,inset 0 1px 1px #fff9;box-sizing:border-box}
-      .startup-progress progress{appearance:none;-webkit-appearance:none;display:block;width:100%;height:clamp(24px,4vw,40px);margin:0;border:1px solid #403b24;border-radius:999px;overflow:hidden;background:linear-gradient(#513300,#1d1304 60%,#050604);box-shadow:inset 0 2px 4px #000}
-      .startup-progress progress::-webkit-progress-bar{background:transparent;border-radius:999px}
-      .startup-progress progress::-webkit-progress-value{border-radius:999px;background:repeating-linear-gradient(125deg,#ffb51b00 0 24px,#bd59032e 25px 47px),linear-gradient(#ffe55f 0%,#ffbd25 32%,#eb8a12 64%,#d34e08 100%);box-shadow:inset 0 1px 2px #fff9,1px 0 3px #ffba3155}
-      .startup-progress progress::-moz-progress-bar{border-radius:999px;background:repeating-linear-gradient(125deg,#ffb51b00 0 24px,#bd59032e 25px 47px),linear-gradient(#ffe55f 0%,#ffbd25 32%,#eb8a12 64%,#d34e08 100%);box-shadow:inset 0 1px 2px #fff9}
-      .startup-caption{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:.25em;color:#fff8e0;font:900 clamp(11px,2vw,19px) system-ui,sans-serif;text-shadow:0 1px 2px #754007;pointer-events:none}.startup-caption span{font-variant-numeric:tabular-nums}
+      .startup-progress{position:relative;width:76%;max-width:400px;padding:3px;border-radius:999px;background:linear-gradient(#faf9ed,#898b88 24%,#30312e 49%,#070806 76%,#171916);box-shadow:0 2px 3px #000,0 0 0 1px #b8b7ad,inset 0 1px 1px #fff9;box-sizing:border-box}
+      #startup-bar{position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden}
+      .startup-track{position:relative;height:clamp(18px,2.4vw,24px);border:1px solid #403b24;border-radius:999px;overflow:hidden;background:linear-gradient(#513300,#1d1304 60%,#050604);box-shadow:inset 0 2px 4px #000}
+      #startup-fill{position:absolute;inset:0;border-radius:999px;transform-origin:left;transform:scaleX(0);transition:transform .1s linear;will-change:transform;overflow:hidden;background:linear-gradient(#ffe55f 0%,#ffbd25 32%,#eb8a12 64%,#d34e08 100%);box-shadow:inset 0 1px 2px #fff9}
+      #startup-fill::before{content:"";position:absolute;inset:0 -46px;background:repeating-linear-gradient(135deg,transparent 0 16px,#bd59032e 16px 32px);animation:loading-stripes 1.4s linear infinite;will-change:transform}
+      .startup-caption{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:.25em;color:#fff8e0;font:900 clamp(10px,1.6vw,13px) system-ui,sans-serif;text-shadow:0 1px 2px #754007;pointer-events:none}.startup-caption span{font-variant-numeric:tabular-nums}
+      @media(max-height:480px) and (min-aspect-ratio:1/1){.startup-content{width:min(480px,70vh)}#startup img{max-height:55vh}.startup-progress{width:80%}}
+      @keyframes loading-stripes{to{transform:translateX(-45.255px)}}
       @keyframes logo-in{from{opacity:0}to{opacity:1}}
-      @media(prefers-reduced-motion:reduce){#startup img{animation-duration:.1s}#startup{transition-duration:.1s}}
+      @media(prefers-reduced-motion:reduce){#startup img{animation-duration:.1s}#startup{transition-duration:.1s}#startup-fill{transition:none}#startup-fill::before{animation:none}}
     </style>
-    <div id="startup" role="status" aria-label="Loading Redline Horizon"><img src="./redline-logo.png" alt="Redline Horizon" fetchpriority="high"><div class="startup-progress"><progress id="startup-bar" max="100" value="0" aria-label="Loading progress"></progress><div class="startup-caption" aria-hidden="true">LOADING……<span id="startup-percent">0%</span></div></div></div>
+    <div id="startup" role="status" aria-label="Loading Redline Horizon"><div class="startup-content"><img src="./redline-logo.png" alt="Redline Horizon" fetchpriority="high"><div class="startup-progress"><progress id="startup-bar" max="100" value="0" aria-label="Loading progress"></progress><div class="startup-track" aria-hidden="true"><div id="startup-fill"></div></div><div class="startup-caption" aria-hidden="true">LOADING……<span id="startup-percent">0%</span></div></div></div></div>
     <main id="ui" aria-busy="true"></main>
   </body>
 </html>

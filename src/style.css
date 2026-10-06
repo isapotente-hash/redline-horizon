@@ -257,7 +257,7 @@ button[hidden],
   right: 3vw;
   top: 3.5vh;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
 }
 .tiny {
@@ -1188,22 +1188,6 @@ label output {
     right:var(--hud-right);
     display:block;
   }
-  .mobile-device .drive-ui .topbar > div:first-child {
-    position:absolute;
-    top:0;
-    left:0;
-    max-width:calc(50% - 64px);
-  }
-  .mobile-device .drive-ui .topbar .tiny {font-size:7px;line-height:10px;letter-spacing:1px;margin-bottom:3px}
-  .mobile-device .drive-ui .topbar #location {
-    display:block;
-    font-size:9px;
-    line-height:12px;
-    letter-spacing:.8px;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-  }
   .mobile-device .drive-ui .topbar nav {
     display:grid;
     grid-template-columns:minmax(44px,1fr) minmax(70px,1.4fr) repeat(3,minmax(44px,1fr));
@@ -1315,7 +1299,6 @@ label output {
 /* Wide touch screens have space for a single-row action bar. */
 @media (min-width: 640px) {
   .mobile-device .drive-ui {--map-size:116px;--dial-size:184px;--hud-info-top:calc(var(--hud-top) + 58px)}
-  .mobile-device .drive-ui .topbar > div:first-child {max-width:150px}
   .mobile-device .drive-ui .topbar nav {
     grid-template-columns:clamp(48px,7vw,68px) 70px repeat(3,clamp(48px,7vw,68px));
     grid-template-rows:44px;
@@ -1397,7 +1380,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 .mobile-device .menu-panel{max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain}
 @media(max-width:480px){.mobile-device .activity-grid{grid-template-columns:1fr}.mobile-device .lobby-settings{grid-template-columns:1fr 1fr;gap:10px}.mobile-device .activities-panel{padding:20px}.mobile-device .garage-spec{gap:16px}.mobile-device .garage-spec strong{font-size:24px}}
 @media(prefers-reduced-motion:reduce){button,.mode-card,#toast{transition:none!important;animation:none!important}}
-.result-standings{list-style:none;padding:0;margin:20px 0}.result-standings li{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid #ffffff18;font-size:12px}.result-standings li>span{flex:1}.result-standings li>strong{font-variant-numeric:tabular-nums;color:#9ee8df}.mobile-device #mode-label{display:block;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.result-standings{list-style:none;padding:0;margin:20px 0}.result-standings li{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid #ffffff18;font-size:12px}.result-standings li>span{flex:1}.result-standings li>strong{font-variant-numeric:tabular-nums;color:#9ee8df}
 /* Optional driving guidance leaves the default racing HUD untouched. */
 #corner-guide{position:absolute;right:24px;top:132px;width:170px;background:#11242ce8;border-left:3px solid #8be8ce;padding:12px;display:grid;gap:5px;font-size:11px;pointer-events:none}#corner-guide b{letter-spacing:1px}#corner-speed{font-size:23px;font-variant-numeric:tabular-nums}#corner-guide small{color:#bfd0d4}#corner-guide.brake-now{border-color:#ffba69;background:#38231ae8}
 #frame-diagnostics{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);width:264px;padding:12px;background:#08151deb;font-size:9px;pointer-events:none}#frame-graph{display:block;width:100%;height:64px}#frame-readings{white-space:pre-line;line-height:1.7;margin:5px 0}#frame-diagnostics small{color:#a6b6be;font-size:8px}
