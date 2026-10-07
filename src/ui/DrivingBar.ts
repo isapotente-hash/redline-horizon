@@ -13,8 +13,8 @@ export const drivingBarMarkup = (wallet: string) => `<header class="topbar drivi
   <nav class="driving-actions" aria-label="Driving controls">
     <button type="button" data-action="vehicle-toggle" id="vehicle-toggle" class="toolbar-action toolbar-exit" aria-label="Exit vehicle" aria-keyshortcuts="Shift">${icon('exit')}<span class="toolbar-label">EXIT</span><kbd>SHIFT</kbd></button>
     <button type="button" data-action="autopilot" id="autopilot-toggle" class="toolbar-action toolbar-auto" aria-label="Autopilot off" aria-keyshortcuts="F" aria-pressed="false">${icon('autopilot')}<span class="toolbar-auto-copy"><span class="toolbar-label">AUTOPILOT</span><span class="toolbar-status">OFF</span></span><kbd>F</kbd></button>
-    <button type="button" data-action="photo" class="toolbar-action toolbar-photo" aria-keyshortcuts="P">${icon('photo')}<span class="toolbar-label">PHOTO</span><kbd>P</kbd></button>
-    <button type="button" data-action="map" class="toolbar-action toolbar-map" aria-keyshortcuts="M">${icon('map')}<span class="toolbar-label">MAP</span><kbd>M</kbd></button>
+    <button type="button" data-action="photo" class="toolbar-action toolbar-photo" aria-label="Photo mode" aria-keyshortcuts="P">${icon('photo')}<span class="toolbar-label">PHOTO</span><kbd>P</kbd></button>
+    <button type="button" data-action="map" class="toolbar-action toolbar-map" aria-label="Map" aria-keyshortcuts="M">${icon('map')}<span class="toolbar-label">MAP</span><kbd>M</kbd></button>
     <button type="button" data-action="pause" class="toolbar-action toolbar-pause" aria-label="Pause" aria-keyshortcuts="Escape">${icon('pause')}<span class="toolbar-pause-label">PAUSE</span><kbd>ESC</kbd></button>
   </nav>
   ${wallet}

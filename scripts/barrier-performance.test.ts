@@ -14,13 +14,10 @@ test('Very Low and 100 m render/50 m simulation limits save and reload; existing
  for(const quality of ['low','medium','high','ultra']){storage({quality,renderDistance:525,simulationDistance:275});const s=new SaveManager();assert.equal(s.settings.quality,quality);assert.equal(s.settings.renderDistance,525);assert.equal(s.settings.simulationDistance,275);}
  storage({quality:'invalid',renderDistance:-1,simulationDistance:0});const invalid=new SaveManager();assert.equal(invalid.settings.quality,defaults.quality);assert.equal(invalid.settings.renderDistance,100);assert.equal(invalid.settings.simulationDistance,50);
 });
-test('Very Low disables costly render features, uses direct rendering, and switching back restores the original presets',()=>{
- let pixelRatio=1,direct=0,post=0;Object.defineProperty(globalThis,'devicePixelRatio',{configurable:true,value:2});
- const r=Object.create(RenderSystem.prototype) as any;r.settings={...defaults,quality:'very-low'};r.sun={shadow:{mapSize:new T.Vector2(),map:null}};r.clouds={visible:true};r.renderer={shadowMap:{enabled:true},capabilities:{maxSamples:4},setPixelRatio:(n:number)=>pixelRatio=n,getPixelRatio:()=>pixelRatio,render:()=>direct++};r.ao={enabled:true};r.bloom={enabled:true};r.composer={setPixelRatio:()=>{},renderTarget1:{dispose(){}},renderTarget2:{dispose(){}},render:()=>post++};r.resize=()=>{};
- r.applyQuality();assert.equal(pixelRatio,.5);assert.equal(r.renderer.shadowMap.enabled,false);assert.equal(r.clouds.visible,false);assert.equal(r.ao.enabled,false);assert.equal(r.bloom.enabled,false);r.render(new T.Object3D());assert.equal(direct,1);assert.equal(post,0);
- r.settings.quality='low';r.applyQuality();assert.equal(pixelRatio,1);assert.equal(r.renderer.shadowMap.enabled,true);assert.equal(r.clouds.visible,true);r.render(new T.Object3D());assert.equal(direct,2);
- r.settings.quality='high';r.applyQuality();assert.equal(pixelRatio,2);assert.equal(r.ao.enabled,true);assert.equal(r.bloom.enabled,true);r.render(new T.Object3D());assert.equal(post,1);
- const grass=new DryGrass(),mesh=grass.batch(1);grass.plant(mesh,0,0,0,0,1);mesh.computeBoundingSphere();mesh.userData.fieldCount=1;grass.update({...defaults,quality:'very-low'});assert.equal(grass.visible(mesh,new T.Vector3()),false);assert.equal(mesh.count,0);grass.update({...defaults,quality:'high'});assert.equal(grass.visible(mesh,new T.Vector3()),true);assert.equal(mesh.count,1);mesh.dispose();grass.material.dispose();grass.geometry.dispose();
+test('Very Low retains full grass detail, and visual detail is independent of preset names at equal distances',()=>{
+ const grass=new DryGrass(),mesh=grass.batch(1);grass.plant(mesh,0,0,0,0,1);mesh.computeBoundingSphere();mesh.userData.fieldCount=1;
+ for(const quality of ['very-low','low','medium','high','ultra'] as const){grass.update({...defaults,quality,renderDistance:100});assert.equal(grass.visible(mesh,new T.Vector3()),true);assert.equal(mesh.count,1);assert.equal(grass.visible(mesh,new T.Vector3(0,0,200)),false);}
+ mesh.dispose();grass.material.dispose();grass.geometry.dispose();
 });
 test('all eight vehicles allow walking across front/rear and along both sides, retain solid contact and have no leftover seated collider',async()=>{
  const p=await new PhysicsWorld().init();p.world.timestep=1/60;p.box(0,-.1,0,100,.2,100);const car=new VehiclePhysics(p,new RoadNetwork(),{...defaults}),foot=new OnFootPlayer(p);const bodyCount=p.world.bodies.len();let walks=0;
@@ -43,9 +40,9 @@ test('terrain collision covers neighboring tile edges/corners at 50 m, so actual
   const terrainCount=[...world.chunks.values()].filter(c=>c.collider).length;settings.simulationDistance=50;world.update(new T.Vector3(-300,30,-300),true);p.world.step();assert.ok(!world.chunks.get('0,-2')?.collider,'distant collision unloads');console.log({minimumSimulationMeters:50,terrainCount,crossingX:car.position.x});
  }finally{p.world.free();}
 });
-test('Very Low reduces active traffic without leaving hidden nearby vehicle barriers, and shorter render ranges cull road sectors',async()=>{
+test('traffic limits come from distances and inactive cars leave no hidden barriers; shorter render ranges cull road sectors',async()=>{
  dom();const p=await new PhysicsWorld().init(),roads=new RoadNetwork(),traffic=new TrafficManager(roads,p,12),player=roads.at(roads.main,120).p;
- try{traffic.update(1/60,player,'very-low',1000,100);p.world.step();assert.ok(traffic.cars.filter(c=>c.body.isEnabled()).length<=4);for(const c of traffic.cars)if(c.root.position.distanceTo(player)<100&&c.body.isEnabled())assert.equal(c.root.visible,true);traffic.update(1/60,player,'very-low',50,100);p.world.step();for(const c of traffic.cars)if(c.body.isEnabled())assert.ok(c.root.visible&&c.root.position.distanceTo(player)<=50);
+ try{traffic.update(1/60,player,'very-low',1000,100);p.world.step();assert.ok(traffic.cars.filter(c=>c.body.isEnabled()).length<=traffic.cars.length);for(const c of traffic.cars)if(c.root.position.distanceTo(player)<100&&c.body.isEnabled())assert.equal(c.root.visible,true);traffic.update(1/60,player,'very-low',50,100);p.world.step();for(const c of traffic.cars)if(c.body.isEnabled())assert.ok(c.root.visible&&c.root.position.distanceTo(player)<=50);
   const settings={...defaults,quality:'very-low' as const,renderDistance:500,simulationDistance:50},world=new World(roads,p,settings);const near={group:new T.Group(),center:player.clone(),radius:10},far={group:new T.Group(),center:player.clone().add(new T.Vector3(300,0,0)),radius:10};world.roadSectors.push(near,far);world.update(player,true);assert.equal(far.group.visible,true);settings.renderDistance=100;world.update(player,true);assert.equal(near.group.visible,true);assert.equal(far.group.visible,false);
  }finally{p.world.free();}
 });

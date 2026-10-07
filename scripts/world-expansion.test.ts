@@ -103,7 +103,7 @@ test('streamed scenery and terrain stay bounded after crossing distant regions',
  await ready;const sectors=world.roadSectors.map(s=>s.group);const geometries=sectors.map(s=>s.children.map((o:any)=>o.geometry));
  for(const road of [roads.main,...roads.roads.filter(r=>['COPPER DUNES','SUMMIT PASS','CEDAR SUBURBS','SOUTH COAST'].includes(r.name))]){
   const p=roads.at(road,600).p;await world.prime(p);world.update(p);
-  assert.ok(world.chunks.size<45,`unbounded near chunks ${world.chunks.size}`);assert.ok(world.farTiles.size<70);
+  const residentBound=(2*Math.ceil(world.residentRadius+1.7)+1)**2;assert.ok(world.chunks.size<=residentBound,`unbounded near chunks ${world.chunks.size} > ${residentBound}`);for(const c of world.chunks.values())assert.ok(Math.hypot(c.x-Math.floor(p.x/256),c.z-Math.floor(p.z/256))<=world.residentRadius+1.7);assert.ok(world.farTiles.size<70);
   for(const c of world.chunks.values())for(const o of c.obstacles){const p=new T.Vector3().setFromMatrixPosition(o.matrix);assert.ok(world.terrainSampler.vegetationClear(p.x,p.z,.2),'solid scenery inside road corridor');}
  }
  assert.deepEqual(world.roadSectors.map(s=>s.group),sectors,'track pool identities stay stable');assert.deepEqual(sectors.map(s=>s.children.map((o:any)=>o.geometry)),geometries,'no track geometry allocations while travelling');

@@ -30,38 +30,19 @@ export class RenderSystem {
   night = 0;
   exposure = 0.95;
   resolutionScale=1;
-  private resolutionClock=0;
-  private frameAverage=1/60;
-  private effectsReduced=false;
-  private shadowFrame=0;
-  private stalledFrames=0;
   private applyEffects(){
-    if(this.renderer)this.renderer.shadowMap.autoUpdate=!this.effectsReduced;
-    const enabled=["high","ultra"].includes(this.settings.quality)&&!this.effectsReduced;
-    if(this.ao)this.ao.enabled=enabled;
-    if(this.bloom)this.bloom.enabled=enabled;
+    if(this.renderer)this.renderer.shadowMap.autoUpdate=true;
+    if(this.ao)this.ao.enabled=true;
+    if(this.bloom)this.bloom.enabled=true;
   }
   private updateClarity(){
     if(!this.renderer||!this.grade)return;
     const ratio=this.renderer.getPixelRatio();
     this.grade.uniforms.texel.value.set(1/(innerWidth*ratio),1/(innerHeight*ratio));
-    this.grade.uniforms.sharpness.value=clamp(.12+(1-ratio)*.3,.06,.22);
+    this.grade.uniforms.sharpness.value=.18;
   }
-  adaptResolution(dt:number,driving:boolean){
-    if(!this.renderer||!driving||dt<=0||document.hidden){this.stalledFrames=0;return;}
-    // Ignore isolated loading/tab stalls, but respond to sustained very slow drawing.
-    if(dt>.25){
-      if(++this.stalledFrames>=3&&this.settings.adaptiveResolution&&!this.effectsReduced){this.effectsReduced=true;this.applyEffects();}
-      return;
-    }
-    this.stalledFrames=0;
-    this.frameAverage+=(dt-this.frameAverage)*.035;this.resolutionClock+=dt;
-    if(this.resolutionClock<2)return;this.resolutionClock=0;
-    // Keep buffers stable throughout play. Recover effects on explicit preset changes.
-    if(this.settings.adaptiveResolution&&this.frameAverage>1/48&&!this.effectsReduced){
-      this.effectsReduced=true;this.applyEffects();
-    }
-  }
+  // Compatibility hook: image buffers and effects never change with frame timing.
+  adaptResolution(_dt:number,_driving:boolean){}
   env?: T.WebGLRenderTarget;
   constructor(
     public canvas: HTMLCanvasElement,
@@ -149,14 +130,11 @@ export class RenderSystem {
       this.ao = new SSAOPass(this.scene,this.camera,1,1,12);
       this.ao.ssaoMaterial.uniforms.cameraProjectionMatrix.value=this.camera.projectionMatrix;
       this.ao.ssaoMaterial.uniforms.cameraInverseProjectionMatrix.value=this.camera.projectionMatrixInverse;
-      // EffectComposer owns pass sizing. Scale AO once, avoiding full-size/low-size churn.
-      const sizeAO=this.ao.setSize.bind(this.ao);
-      this.ao.setSize=(w,h)=>{const scale=this.settings.quality==='ultra'?1:.65;sizeAO(Math.max(1,Math.floor(w*scale)),Math.max(1,Math.floor(h*scale)));};
       this.ao.kernelRadius=4;
       this.ao.minDistance=.0002;
       this.ao.maxDistance=.015;
       this.composer.addPass(this.ao);
-      this.bloom = new UnrealBloomPass(new T.Vector2(1, 1), 0.12, 0.35, 1.7);
+      this.bloom = new UnrealBloomPass(new T.Vector2(1, 1), 0.08, 0.35, 1.7);
       this.composer.addPass(this.bloom);
       this.grade=new ShaderPass({uniforms:{tDiffuse:{value:null},texel:{value:new T.Vector2()},sharpness:{value:.12}},
         vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
@@ -183,28 +161,24 @@ export class RenderSystem {
   }
   applyQuality() {
     if (!this.renderer) return;
-    const s = { 'very-low': 512, low: 1024, medium: 2048, high: 2048, ultra: 4096 }[
-      this.settings.quality
-    ];
-    this.sun.shadow.mapSize.set(s, s);
-    this.sun.shadow.map?.dispose();
-    this.sun.shadow.map = null;
-    this.renderer.shadowMap.enabled = this.settings.quality !== 'very-low';
-    this.clouds.visible = this.settings.quality !== 'very-low';
-    this.renderer.setPixelRatio(
-      Math.min(
-        devicePixelRatio,
-        { 'very-low': 0.5, low: 1, medium: 1.25, high: 2, ultra: 2 }[this.settings.quality],
-      ),
-    );
+    const size=Math.min(4096,this.renderer.capabilities.maxTextureSize||4096);
+    if(this.sun.shadow.mapSize.x!==size){
+      this.sun.shadow.mapSize.set(size,size);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map=null;
+    }
+    this.renderer.shadowMap.enabled=true;
+    this.clouds.visible=true;
+    // Every preset has the same display-density image (up to 2x CSS resolution).
+    this.renderer.setPixelRatio(Math.max(1,Math.min(devicePixelRatio,2)));
     this.resolutionScale=1;
-    this.effectsReduced=false;this.shadowFrame=0;this.stalledFrames=0;this.resolutionClock=0;this.frameAverage=1/60;
     this.applyEffects();
-    if (this.composer) {
+    if(this.composer){
       this.composer.setPixelRatio(this.renderer.getPixelRatio());
-      const samples=this.settings.quality==='medium'?Math.min(2,this.renderer.capabilities.maxSamples):["high","ultra"].includes(this.settings.quality)?Math.min(4,this.renderer.capabilities.maxSamples):0;
-      for(const target of [this.composer.renderTarget1,this.composer.renderTarget2]) {target.samples=samples;target.dispose();}
-      // Hardware antialiasing already resolves edges; stacking FXAA softens them.
+      const samples=Math.min(4,this.renderer.capabilities.maxSamples);
+      for(const target of [this.composer.renderTarget1,this.composer.renderTarget2]){
+        if(target.samples!==samples){target.samples=samples;target.dispose();}
+      }
       if(this.fxaa)this.fxaa.enabled=samples===0;
     }
     this.resize();
@@ -250,11 +224,11 @@ export class RenderSystem {
     this.scene.environmentIntensity=lerp(.78,.1,this.night);
     const fog = this.scene.fog as T.FogExp2;
     fog.density = {
-      clear: 0.00023,
+      clear: 0.0001,
       cloudy: 0.00065,
       rain: 0.0006+this.settings.rainIntensity*.0009,
       fog: 0.0028,
-    }[this.settings.weather]*Math.max(1,1600/this.settings.renderDistance);
+    }[this.settings.weather];
     fog.color.set(
       this.night > 0.7
         ? "#111b2b"
@@ -282,11 +256,7 @@ export class RenderSystem {
   render(_hero: T.Object3D, _garage = false, _stationary = false) {
     if (!this.renderer) return;
     this.renderer.toneMappingExposure = this.exposure;
-    // Updating shadow maps at half rate saves work without reallocating image buffers.
-    if(this.effectsReduced)this.renderer.shadowMap.needsUpdate=this.shadowFrame++%2===0;
-    if (this.settings.quality === "low" || this.settings.quality === "very-low")
-      this.renderer.render(this.scene, this.camera);
-    else this.composer!.render();
+    this.composer!.render();
   }
   capture() {
     return this.canvas.toDataURL("image/png");

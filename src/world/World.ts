@@ -116,7 +116,7 @@ export class World {
     this.buildCity();await yieldLoading();this.batchCity();await yieldLoading();this.buildSigns();progress(1);
     return this;
   }
-  get visualRadius(){return Math.max(1,Math.min(6,Math.ceil(({'very-low':1,low:2,medium:3,high:3,ultra:4}[this.settings.quality])*this.settings.renderDistance/1600)));}
+  get visualRadius(){return Math.max(1,Math.min(6,Math.ceil(this.settings.renderDistance/400)));}
   get residentRadius(){return Math.max(this.visualRadius,Math.ceil(this.settings.simulationDistance/256));}
   /** Distance to the tile surface, not its grid index: edges/corners remain walkable. */
   private chunkDistance(p:T.Vector3,x:number,z:number){
@@ -325,7 +325,7 @@ export class World {
     const chunk:Chunk={group,geometry:g,x,z,treeBatches,treeLod:1,grass,obstacles,obstacleColliders:new Map()};this.chunks.set(`${x},${z}`,chunk);return chunk;
   }
   update(p: T.Vector3, force = false, view=p) {
-    const now=performance.now(),settingsKey=`${this.settings.quality}:${this.settings.renderDistance}:${this.settings.simulationDistance}`;
+    const now=performance.now(),settingsKey=`${this.settings.renderDistance}:${this.settings.simulationDistance}`;
     const changed=settingsKey!==this.updateSettings;
     if(!force&&!changed&&now-this.lastUpdate<100)return;
     this.lastUpdate=now;this.updateSettings=settingsKey;
@@ -349,7 +349,7 @@ export class World {
     for (const [key, c] of this.chunks) {
       const d = Math.hypot(c.x - cx, c.z - cz);
       if(updateLod){
-        const nearDistance={'very-low':0,low:0,medium:60,high:95,ultra:140}[this.settings.quality];
+        const nearDistance=140;
         for(const batch of c.treeBatches){let near=0,far=0;
           for(let i=0;i<batch.transforms.length;i++){const m=batch.transforms[i],e=m.elements,isNear=(e[12]-p.x)**2+(e[14]-p.z)**2<nearDistance**2,index=isNear?near++:far++;
             const foliage=isNear?batch.nearFoliage:batch.foliage,wood=isNear?batch.nearWood:batch.wood;

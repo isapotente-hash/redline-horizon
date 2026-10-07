@@ -1,3 +1,4 @@
+import {GRAPHICS_PRESETS} from "./GraphicsPresets";
 import {AsyncProfileStore,IndexedDBProfileStore} from './AsyncProfileStore';
 import {DriverSetup,validateSetup,SETUP_PRESETS} from '../vehicles/DriverSetup';
 import {LIVERIES,Livery,validLivery,cleanPlate} from '../vehicles/CosmeticCatalog';
@@ -7,6 +8,7 @@ import { CARS, carSpec } from "../vehicles/CarCatalog";
 import { Loadout, STOCK, UPGRADES, UPGRADE_SLOTS } from "../vehicles/UpgradeCatalog";
 import {LapRecord,MAX_LAP_RECORDS,validLapRecords} from '../racing/LapRecords';
 export type Settings = {
+  settingsVersion: number;
   cameraMotion:number;
   cornerGuide:"off"|"hud"|"markers";rainIntensity:number;diagnostics:boolean;repairCosts:boolean;driverName:string;
   adaptiveResolution:boolean;
@@ -31,12 +33,13 @@ export type Settings = {
   units: "kmh" | "mph";
 };
 export const defaults: Settings = {
+  settingsVersion: 2,
   cameraMotion:1,cornerGuide:"off",rainIntensity:.7,diagnostics:false,repairCosts:false,driverName:"Driver",
-  adaptiveResolution:true,
+  adaptiveResolution:false,
   renderDistance: 1600,
   simulationDistance: 600,
   raceLaps: 1,
-  autopilotRoutes: true,
+  autopilotRoutes: false,
   autopilotSpeed: 90,
   autopilotMode: "full",
   quality: "high",
@@ -55,7 +58,7 @@ export const defaults: Settings = {
 };
 function validSettings(value:unknown):Settings {
   const result={...defaults}, a=record(value)?value:{};
-  for(const key of ['adaptiveResolution','autopilotRoutes','cycle','automatic','traction','stability','diagnostics','repairCosts'] as const)
+  for(const key of ['cycle','automatic','traction','stability','diagnostics','repairCosts'] as const)
     if(typeof a[key]==='boolean')result[key]=a[key];
   const bounds={rainIntensity:[0,1],cameraMotion:[0,1],renderDistance:[100,3000],simulationDistance:[50,1000],autopilotSpeed:[30,180],hour:[0,24],volume:[0,1],tint:[0,1],camera:[0,6]} as const;
   for(const key of Object.keys(bounds) as (keyof typeof bounds)[])
@@ -64,10 +67,14 @@ function validSettings(value:unknown):Settings {
   result.raceLaps=a.raceLaps===3?3:1;
   if(['full','steering','speed'].includes(a.autopilotMode))result.autopilotMode=a.autopilotMode;
   if(['very-low','low','medium','high','ultra'].includes(a.quality))result.quality=a.quality;
+  // Preserve custom saved distances; old saves without them receive the selected budget.
+  const preset=GRAPHICS_PRESETS[result.quality];
+  if(!Number.isFinite(a.renderDistance))result.renderDistance=preset.renderDistance;
+  if(!Number.isFinite(a.simulationDistance))result.simulationDistance=preset.simulationDistance;
   if(['clear','cloudy','rain','fog'].includes(a.weather))result.weather=a.weather;
   if(['kmh','mph'].includes(a.units))result.units=a.units;
   for(const key of ['paint','wheels'] as const)if(typeof a[key]==='string'&&/^#[0-9a-f]{6}$/i.test(a[key]))result[key]=a[key];
-  if(["off","hud","markers"].includes(a.cornerGuide))result.cornerGuide=a.cornerGuide;
+  if(a.settingsVersion===2&&["off","hud","markers"].includes(a.cornerGuide))result.cornerGuide=a.cornerGuide;
   if(typeof a.driverName==="string")result.driverName=a.driverName.replace(/[<>\x00-\x1f]/g,"").trim().slice(0,16)||"Driver";
   return result;
 }

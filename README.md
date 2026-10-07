@@ -15,7 +15,7 @@ Expected Pages address after enabling publication: https://isapotente-hash.githu
 - A percentage loading bar covers model downloads, physics, world preparation and shader warmup. Driving and multiplayer state synchronization start only after readiness.
 - Persistent, preallocated road sectors are culled/reused; terrain generation yields in short batches outside the driving frame. Existing road and obstacle collision geometry is retained.
 - Driving avoids expensive six-view reflection refreshes. Resolution can adapt to frame time with hysteresis; switch it off in Settings if preferred. HUD updates are limited to 10 Hz. Physics uses a fixed 60 Hz timestep with a two-step / 6 ms catch-up budget, network poses at 20 Hz, and rendering uses requestAnimationFrame.
-- Existing vehicles, wheelies, statistics, selected autopilot routes, police, upgrades, races and 2–5-player rooms are preserved.
+- Existing vehicles, wheelies, statistics, automatic autopilot routing, police, upgrades, races and 2–5-player rooms are preserved.
 
 60 FPS is a target, not a guarantee: browser, GPU, device temperature, network restrictions and graphics settings still matter. Peer-to-peer rooms need Internet access to the PeerJS signaling service; restrictive networks may block WebRTC.
 
@@ -75,7 +75,7 @@ The driving instrument follows the supplied reference: a transparent circular di
 
 HUD overrides and touch listeners apply only to recognized touch-capable Android/iOS phones and tablets (including the iPadOS desktop user agent). Windows, ChromeOS, macOS and Linux desktop/laptop browsers retain keyboard/mouse controls, even when resized or touchscreen enabled. Viewport size alone never enables touch controls.
 
-The approved top bar groups Exit/Enter, Autopilot, Photo, Map and Pause in a dark control strip. Desktop shows keyboard shortcuts; portrait mobile puts Exit/Enter, the existing coin fade and Pause above Autopilot, Photo and Map. Wide mobile screens use one row. Buttons have at least 44px targets, respect safe areas, and show all three assist modes with explicit ON/OFF status. Autopilot is disabled on foot. Mode changes update labels without replacing the icons or event handlers. Five bundled Lucide SVG icons add no network requests or runtime dependency; their license is in `licenses/LUCIDE.txt`.
+The approved top bar groups Exit/Enter, Autopilot, Photo, Map and Pause in a dark control strip. Desktop shows keyboard shortcuts; portrait mobile puts Exit/Enter, the existing coin fade and Pause above Autopilot, Photo and Map. Wide mobile screens use one row. Desktop controls are 32px high; mobile controls retain 44px touch targets and use one compact row on normal-width phones. Very narrow phones put the balance above the controls. Controls respect safe areas, and show all three assist modes with explicit ON/OFF status. Autopilot is disabled on foot. Mode changes update labels without replacing the icons or event handlers. Five bundled Lucide SVG icons add no network requests or runtime dependency; their license is in `licenses/LUCIDE.txt`.
 
 The map, dial, steering and pedal areas retain the existing mobile layout. Walking still switches to the left joystick and right look area, and desktop keeps its WASD/mouse controls. Optional driving notices avoid the complete action bar.
 
@@ -143,18 +143,27 @@ Character delivery uses thirty bounded binary transfers with six requests at a t
 
 Exiting switches from vehicle inputs to independent forward/right walking axes. Desktop WASD or arrows move and strafe relative to the camera; click the scene to capture the mouse for look (drag is available if capture is unavailable), and Esc releases it and pauses. Mobile phones/tablets show a left analogue joystick and a right camera-drag area in place of steering, GO, BRAKE, handbrake and wheelie buttons. Two fingers can walk and look together. Release, cancel, lost capture, focus loss, pause and possession changes clear touch movement. Entering restores the original vehicle controls. Touch UI and handlers use the existing mobile device policy, so touch laptops and resized desktops retain keyboard/mouse controls.
 
-## Very Low graphics and short-distance collision streaming
-
-Very Low renders at a maximum 0.5 device pixel ratio, disables shadows, clouds, grass blades and post-processing, uses distant tree geometry, and caps ambient traffic at four. The existing Low/Medium/High/Ultra presets and default distances remain available. Render distance now ranges from 100 to 3000 m and simulation distance from 50 to 1000 m, in 25 m steps; settings survive reload. Active races and police keep their existing simulation rules.
+## Short-distance collision streaming
 
 Terrain collision uses distance to each tile boundary instead of the integer tile offset. Nearby edges and diagonal corners are prefetched, so walking behind a parked vehicle cannot stop at an unloaded neighbouring tile merely because simulation distance is below 256 m. Ground keeps a small unloading buffer; nearby scenery colliders use actual metre distance plus their physical extent and a 32 m unloading buffer. This preserves solid vehicles/walls/trees while allowing distant collision work to unload. Walking floor checks exclude the parked vehicle so its chassis cannot be mistaken for ground.
-
-## Clear rendering with a bounded performance budget
-
-Low renders at one pixel per screen CSS pixel, using hardware antialiasing and direct rendering. Medium caps pixel ratio at 1.25 with up to two MSAA samples; High/Ultra cap it at 2 with up to four samples. Ratios also respect the display's pixel density. FXAA runs only when hardware antialiasing is unavailable, avoiding a second smoothing pass. The existing colour pass adds a small, locally clamped sharpening filter without another render target or full-screen pass; restrained bloom keeps bright paint and road markings distinct. Road, stone and field textures use bounded 8x anisotropic filtering for clearer surfaces at grazing angles.
-
-Automatic graphics adjustment keeps the selected image resolution fixed throughout gameplay. Under sustained load it disables ambient occlusion/bloom and updates shadows every other frame, then keeps that cheaper path until an explicit graphics setting change. This avoids repeated buffer reallocations, changes in blur and effect recovery cycles. AO targets are sized once at their intended fraction; post-processing is warmed before play. Periodic six-face reflection captures/PMREM rebuilds are removed in favour of the startup sky environment. Very Low remains a deliberately small render budget. Loading, hidden tabs and paused states do not trigger adjustment. No model detail, physics, controls, saved graphics choice or distance settings are changed by this adaptation.
 
 ## Gameplay checkpoints without periodic blocking saves
 
 Ten-second position checkpoints and gameplay economy writes use asynchronous IndexedDB transactions; pending writes coalesce to the latest full profile. Startup validates and restores a newer checkpoint before creating the world, vehicles and collectibles. A newer explicit save wins over an older in-flight checkpoint, including purchases/settings changed during loading. Existing localStorage primary/backup keys and legacy migration remain supported. Menu transactions/settings and lifecycle position flushes remain immediately durable; closing/hiding the game flushes its current profile. Failed/blocked asynchronous storage remains nonfatal and does not introduce a synchronous disk write into the animation frame.
+
+
+## Shared sharp graphics and distance presets
+
+All modes use the same display-density rendering (up to 2× CSS resolution), 4× hardware antialiasing where supported, full-resolution ambient occlusion, restrained bloom, sharpened output, shadows up to 4096px, clouds, grass density, nearby tree detail and road texture filtering. Preset changes never resize render buffers or toggle visual effects. Hardware limits apply equally to every preset. Weather remains a separate setting.
+
+| Preset | Render distance | Simulation distance |
+| --- | ---: | ---: |
+| Very Low | 100m | 50m |
+| Low | 500m | 150m |
+| Medium | 1000m | 350m |
+| High | 1600m | 600m |
+| Ultra | 3000m | 1000m |
+
+Distance sliders can override these budgets, and custom distances survive reload. Old saves without distance values get their selected preset's budget. Scenery residency, grass range and traffic activity follow distance rather than the preset name. Removing half-resolution rendering, stacked FXAA on MSAA hardware and short-range haze keeps Very Low sharp. The game continues to use its existing vehicle, character and scenery assets.
+
+Autopilot route selection is removed from Settings and gameplay; autopilot follows its automatic route. Braking warnings and braking markers default to Off, including a one-time migration of old saves. Players can explicitly enable corner guidance later, and that preference persists.

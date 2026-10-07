@@ -22,36 +22,26 @@ function fixture(quality:Settings['quality']='high',dpr=1,maxSamples=4){
 }
 function frames(r:RenderSystem,dt:number,seconds:number){for(let t=0;t<seconds;t+=dt)r.adaptResolution(dt,true);}
 
-test('Low renders at screen resolution with no post-processing; device pixel density remains capped',()=>{
-  const f=fixture('low',3);assert.equal(f.ratio(),1);f.r.render(new T.Object3D());assert.deepEqual(f.counts(),{direct:1,post:0,probe:0});
-  for(const [quality,cap] of [['very-low',.5],['medium',1.25],['high',2],['ultra',2]] as const){const f=fixture(quality,3);assert.equal(f.ratio(),cap);}
+test('every preset uses the same sharp display-density image, full effects and shadow quality',()=>{
+  for(const quality of ['very-low','low','medium','high','ultra'] as const){
+    const f=fixture(quality,3);assert.equal(f.ratio(),2);assert.equal(f.r.sun.shadow.mapSize.x,4096);
+    assert.equal(f.r.renderer!.shadowMap.enabled,true);assert.equal(f.r.clouds.visible,true);
+    assert.equal(f.r.ao!.enabled,true);assert.equal(f.r.bloom!.enabled,true);
+    f.r.render(new T.Object3D());assert.deepEqual(f.counts(),{direct:0,post:1,probe:0});
+    assert.equal(f.r.grade!.uniforms.sharpness.value,.18);
+  }
+  assert.equal(fixture('very-low',1).ratio(),1);
 });
-test('hardware antialiasing replaces redundant FXAA and unsupported hardware retains a fallback',()=>{
-  for(const quality of ['medium','high','ultra'] as const){const f=fixture(quality,1,4);assert.equal(f.r.fxaa!.enabled,false);assert.equal(f.r.composer!.renderTarget1.samples,quality==='medium'?2:4);}
+test('all modes use hardware antialiasing without redundant FXAA, with fallback on unsupported hardware',()=>{
+  for(const quality of ['very-low','low','medium','high','ultra'] as const){const f=fixture(quality,1,4);assert.equal(f.r.fxaa!.enabled,false);assert.equal(f.r.composer!.renderTarget1.samples,4);}
   const f=fixture('medium',1,0);assert.equal(f.r.fxaa!.enabled,true);assert.equal(f.r.composer!.renderTarget1.samples,0);
 });
-test('sustained slow frames reduce effects while image size remains fixed; no gameplay buffer reallocations occur',()=>{
-  const f=fixture('high',3),initial=f.resizes();frames(f.r,1/30,90);
-  assert.equal(f.ratio(),2);assert.equal(f.r.ao!.enabled,false);assert.equal(f.r.bloom!.enabled,false);assert.equal(f.resizes(),initial);
-  f.r.render(new T.Object3D(),false,true);assert.equal(f.counts().probe,0);
-  assert.equal(f.r.grade!.uniforms.texel.value.x,1/2560);
-});
-test('alternating slow/fast periods cannot oscillate effects, resize buffers or introduce periodic reflections',()=>{
-  const f=fixture('high',2),initial=f.resizes();frames(f.r,1/30,8);
-  for(let n=0;n<6;n++){frames(f.r,1/60,12);frames(f.r,1/30,8);for(let frame=0;frame<600;frame++)f.r.render(new T.Object3D(),false,true);}
-  assert.equal(f.resizes(),initial);assert.equal(f.ratio(),2);assert.equal(f.r.ao!.enabled,false);assert.equal(f.counts().probe,0);
-  // Shadow updates are a bounded alternation, rather than changing shader variants/maps.
-  f.r.render(new T.Object3D());const first=f.r.renderer!.shadowMap.needsUpdate;f.r.render(new T.Object3D());assert.notEqual(f.r.renderer!.shadowMap.needsUpdate,first);
-});
-test('Very Low retains its small budget; paused, hidden and loading frames cannot downgrade effects',()=>{
-  const f=fixture('very-low',3);frames(f.r,1/30,90);assert.equal(f.ratio(),.5);assert.equal(f.r.renderer!.shadowMap.enabled,false);
-  const g=fixture('high');g.r.adaptResolution(2,true);g.r.adaptResolution(1/30,false);(globalThis as any).document.hidden=true;frames(g.r,1/30,90);assert.equal(g.r.ao!.enabled,true);
-});
-test('manual preset/scaling changes restore the selected effects and never change resolution during play',()=>{
-  const f=fixture('high',3);frames(f.r,1/30,20);assert.equal(f.ratio(),2);assert.equal(f.r.ao!.enabled,false);
-  f.r.settings.adaptiveResolution=false;f.r.applyQuality();assert.equal(f.ratio(),2);assert.equal(f.r.ao!.enabled,true);frames(f.r,1/30,20);assert.equal(f.r.ao!.enabled,true);
-  f.r.settings.quality='low';f.r.applyQuality();assert.equal(f.ratio(),1);assert.equal(f.r.ao!.enabled,false);assert.equal(f.r.bloom!.enabled,false);
-});
-test('sustained frames slower than 250 ms still activate the cheaper path without a buffer resize',()=>{
-  for(const dt of [.4,1.2]){const f=fixture('high',2),initial=f.resizes();f.r.adaptResolution(dt,true);f.r.adaptResolution(dt,true);assert.equal(f.r.ao!.enabled,true);f.r.adaptResolution(dt,true);assert.equal(f.r.ao!.enabled,false);assert.equal(f.ratio(),2);assert.equal(f.resizes(),initial);}
+test('long slow/fast periods and stalls cannot downgrade visuals, resize buffers or introduce reflection spikes',()=>{
+  for(const quality of ['very-low','ultra'] as const){
+    const f=fixture(quality,2),initial=f.resizes();
+    for(const dt of [1/30,1/60,.4,1.2])frames(f.r,dt,15);
+    for(let n=0;n<600;n++)f.r.render(new T.Object3D(),false,true);
+    assert.equal(f.resizes(),initial);assert.equal(f.ratio(),2);assert.equal(f.r.ao!.enabled,true);assert.equal(f.r.bloom!.enabled,true);assert.equal(f.counts().probe,0);
+    assert.equal(f.r.grade!.uniforms.texel.value.x,1/2560);
+  }
 });

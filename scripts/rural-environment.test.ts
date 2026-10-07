@@ -18,9 +18,9 @@ test('dry stone walls follow grades continuously, keep clear of pavement and hav
   const split=Math.min(80,road.samples.length-2),b=barrierGeometry(road,split,Math.min(split+80,road.samples.length-1),side),q=b.getAttribute('position');for(let j=0;j<4;j++)for(let axis=0;axis<3;axis++)assert.equal(p.getComponent(split*4+j,axis),q.getComponent(j,axis));b.dispose();g.dispose();
  }
 });
-test('shared grass blades are bounded, rooted outside all roads and culled by distance/quality',()=>{
+test('shared grass blades are bounded, rooted outside all roads and culled by distance with shared density across presets',()=>{
  const grass=new DryGrass(),terrain=new TerrainSampler(roads);const a=terrain.geometry(-256,0,256,24),b=terrain.geometry(0,0,256,24);for(let j=0;j<=24;j++)assert.equal(a.getAttribute('uv').getX(j*25+24),b.getAttribute('uv').getX(j*25));a.dispose();b.dispose();assert.ok(grass.geometry.index!.count/3<=40);const mesh=grass.batch(4);grass.plant(mesh,0,10,0,0,1);mesh.computeBoundingSphere();assert.equal(grass.visible(mesh,new T.Vector3(0,10,2)),true);assert.equal(grass.visible(mesh,new T.Vector3(0,10,200)),false);
  const work=grass.field(-1,0,roads,terrain);let next=work.next();while(!next.done)next=work.next();const field=next.value,m=new T.Matrix4(),p=new T.Vector3();assert.ok(field.count<=640);
  for(let i=0;i<field.count;i++){field.getMatrixAt(i,m);p.setFromMatrixPosition(m);assert.ok(terrain.vegetationClear(p.x,p.z,.5));assert.ok(Math.abs(p.y-terrain.groundHeight(p.x,p.z)+.02)<.0001);}
- const total=field.count;grass.update({quality:'low'} as any);grass.visible(field,new T.Vector3());assert.equal(field.count,Math.floor(total*.4));grass.update({quality:'high'} as any);grass.visible(field,new T.Vector3());assert.equal(field.count,total);field.dispose();mesh.dispose();grass.geometry.dispose();grass.material.dispose();
+ const total=field.count;grass.update({quality:'low',renderDistance:100} as any);grass.visible(field,new T.Vector3());assert.equal(field.count,total);grass.update({quality:'high',renderDistance:100} as any);grass.visible(field,new T.Vector3());assert.equal(field.count,total);field.dispose();mesh.dispose();grass.geometry.dispose();grass.material.dispose();
 });

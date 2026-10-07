@@ -1,3 +1,4 @@
+import {applyDistancePreset} from "./GraphicsPresets";
 import {DriverAvatar,loadDriverAvatar} from '../player/DriverAvatar';
 import {CornerGuide} from '../vehicles/CornerGuide';
 import {FrameDiagnostics} from './FrameDiagnostics';
@@ -321,8 +322,8 @@ export class Game {
       0.6,
       0.96,
     );
-    if (changed === "quality" || changed === "adaptiveResolution") this.render.applyQuality();
-    if(changed==="renderDistance"||changed==="simulationDistance")this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);
+    if(changed==="quality")applyDistancePreset(this.save.settings);
+    if(changed==="quality"||changed==="renderDistance"||changed==="simulationDistance")this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);
     this.ui.sync();
   }
   setState(state: State) {
@@ -614,7 +615,6 @@ export class Game {
     const shift=leftShift||rightShift;
     if(shift)this.toggleFoot();
     if(this.foot.active)return;
-    for(let i=0;i<9;i++)if(this.input.take(`Digit${i+1}`))void this.action(`route:${i}`);
     if (this.input.take("KeyC")) {
       this.camera.setMode(this.camera.mode + 1);
       this.save.settings.camera = this.camera.mode;
@@ -721,7 +721,7 @@ export class Game {
         this.ui.toast("Autopilot off");
       }
       const navigation = {
-        routeChoices:this.save.settings.autopilotRoutes&&!this.race.active&&!this.race.finished,
+        routeChoices:false,
         orbs: this.boosts.pickups,
         coins:this.coins.items,
         limits:!this.dev.noPolice&&!this.race.active&&!this.race.finished?this.police.zones.zones:[],
@@ -851,8 +851,7 @@ export class Game {
         near.sample.d < 995,
     );
     this.audio.siren(driving&&this.police.active,this.police.nearest);
-    const route=driving&&!this.foot.active&&this.autopilot.enabled&&this.save.settings.autopilotMode!=="speed"&&this.save.settings.autopilotRoutes&&!this.race.active&&!this.race.finished?this.autopilot.routes.choice:undefined;
-    if(!!route?.visible!==this.routeVisible){this.routeVisible=!!route?.visible;this.ui.routeChoice(route);}
+    if(this.routeVisible){this.routeVisible=false;this.ui.routeChoice(undefined);}
     this.frames++;this.hudClock+=dt;
     if (this.hudClock>=.1){
       this.guide.update(this.vehicle,driving&&!this.foot.active&&this.save.settings.cornerGuide!=="off",this.race.active?this.race.route:undefined);this.ui.guide(this.guide,driving&&!this.foot.active);
@@ -860,7 +859,7 @@ export class Game {
       if(this.state==="garage")document.getElementById("repair-price")!.textContent=this.save.settings.repairCosts?`Repair · ${this.repairPrice()} coins`:"Cosmetic repair · free";
       this.ui.autopilotStatus(this.autopilot.enabled);
       this.hudClock%=.1;
-      this.ui.routeChoice(route);
+      this.ui.routeChoice(undefined);
       this.ui.footStatus(this.foot.active,this.foot.active&&this.foot.canEnter(this.vehicle));
       this.ui.update(
         this.vehicle,
@@ -915,6 +914,8 @@ export class Game {
                 camera:this.camera.mode,autopilot:this.autopilot.enabled,drift:this.autopilot.drift.phase,autopilotMode:this.save.settings.autopilotMode,
                 position:{x:this.vehicle.position.x,y:this.vehicle.position.y,z:this.vehicle.position.z},
                 renderDistance:this.save.settings.renderDistance,simulationDistance:this.save.settings.simulationDistance,
+                graphics:{preset:this.save.settings.quality,pixelRatio:this.render.renderer?.getPixelRatio(),buffer:[this.render.canvas.width,this.render.canvas.height],shadowSize:this.render.sun.shadow.mapSize.x,ao:this.render.ao?.enabled,bloom:this.render.bloom?.enabled,samples:this.render.composer?.renderTarget1.samples,sharpness:this.render.grade?.uniforms.sharpness.value},
+                cornerGuide:this.save.settings.cornerGuide,autopilotRoutes:this.save.settings.autopilotRoutes,
                 location: this.roads.region(
                   this.vehicle.position.x,
                   this.vehicle.position.z,

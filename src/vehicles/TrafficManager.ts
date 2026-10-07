@@ -177,9 +177,9 @@ export class TrafficManager {
     const curve=new T.CubicBezierCurve3(start,start.clone().addScaledVector(a.t,c.direction*reach),finish.clone().addScaledVector(b.t,-best.direction*reach),finish);
     c.turn={curve,length:curve.getLength(),travel:0,road:best.road,d:best.d,direction:best.direction,lane};
   }
-  update(dt: number, player: T.Vector3, quality: string, simulationDistance=1200, renderDistance=1600, view=player) {
+  update(dt: number, player: T.Vector3, _quality: string, simulationDistance=1200, renderDistance=1600, view=player) {
     const count = this.active
-        ? Math.min(this.cars.length,{ 'very-low': 4, low: 8, medium: 14, high: 20, ultra: 24 }[quality] || 14)
+        ? this.cars.length
         : 0,
       nearest = this.roads.nearest(player.x, player.z);
     for (let i = 0; i < this.cars.length; i++) {
