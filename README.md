@@ -152,9 +152,15 @@ Terrain collision uses distance to each tile boundary instead of the integer til
 Ten-second position checkpoints and gameplay economy writes use asynchronous IndexedDB transactions; pending writes coalesce to the latest full profile. Startup validates and restores a newer checkpoint before creating the world, vehicles and collectibles. A newer explicit save wins over an older in-flight checkpoint, including purchases/settings changed during loading. Existing localStorage primary/backup keys and legacy migration remain supported. Menu transactions/settings and lifecycle position flushes remain immediately durable; closing/hiding the game flushes its current profile. Failed/blocked asynchronous storage remains nonfatal and does not introduce a synchronous disk write into the animation frame.
 
 
-## Shared sharp graphics and distance presets
+## Automatic device graphics and manual presets
 
-All modes use the same display-density rendering (up to 2× CSS resolution), 4× hardware antialiasing where supported, full-resolution ambient occlusion, restrained bloom, sharpened output, shadows up to 4096px, clouds, grass density, nearby tree detail and road texture filtering. Preset changes never resize render buffers or toggle visual effects. Hardware limits apply equally to every preset. Weather remains a separate setting.
+Automatic graphics is on by default for new and existing profiles. It measures actual gameplay frame cadence and CPU cost, plus asynchronous GPU timer queries when the browser supports them. It starts conservatively at Low with a 60 FPS target, lowers shadows, effects, antialiasing and distances after sustained overload, and can settle at a paced 30 FPS when 60 is not sustainable. Consistent headroom gradually raises quality through Medium and High to Extra High (the maximum Ultra distance/rendering budget). Failed upgrades are held back; paused, hidden, loading and isolated long-stall intervals are excluded. The controller continues monitoring thermal slowdown and changing scene load. Targets are goals, not a guarantee on every device.
+
+Auto never drops rendering below one pixel per CSS pixel and retains existing textures, materials, sharpness and lighting. It can reduce supersampling above that floor. At its lowest tier, ambient occlusion, bloom and shadow rendering are off; higher tiers restore them. Settings shows the active tier, FPS target and effective distances. Choosing a manual preset or distance disables Auto, and manual preferences survive automatic adjustments and reloads. Re-enabling Auto starts a fresh calibration; no device-name guessing or hardware fingerprinting is used.
+
+Frame pacing supports 60/90/120/144 Hz displays without changing the fixed physics timestep. The performance overlay counts all render passes instead of only the final fullscreen pass, and shows GPU milliseconds when supported. GPU queries are bounded, read only after completion, and discarded after disjoint events or tier changes.
+
+Manual presets use the same display-density rendering (up to 2× CSS resolution), 4× hardware antialiasing where supported, full-resolution ambient occlusion, restrained bloom, sharpened output, shadows up to 4096px, clouds, grass density, nearby tree detail and road texture filtering. Manual preset changes never resize render buffers or toggle visual effects. Hardware limits apply equally to every preset. Weather remains a separate setting.
 
 | Preset | Render distance | Simulation distance |
 | --- | ---: | ---: |

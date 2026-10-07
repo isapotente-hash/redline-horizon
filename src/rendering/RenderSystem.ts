@@ -1,3 +1,5 @@
+import {AUTO_GRAPHICS} from "../core/AutoGraphics";
+import {GpuTimer} from "./GpuTimer";
 import * as T from "three";
 import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
 import { cloudLayer } from "./CloudLayer";
@@ -30,10 +32,13 @@ export class RenderSystem {
   night = 0;
   exposure = 0.95;
   resolutionScale=1;
+  private automaticLevel:number|null=null;
+  gpuTimer?:GpuTimer;
+  get gpuMs(){return this.gpuTimer?.milliseconds??null;}
   private applyEffects(){
     if(this.renderer)this.renderer.shadowMap.autoUpdate=true;
-    if(this.ao)this.ao.enabled=true;
-    if(this.bloom)this.bloom.enabled=true;
+    if(this.ao)this.ao.enabled=this.automaticLevel===null||AUTO_GRAPHICS[this.automaticLevel].ao;
+    if(this.bloom)this.bloom.enabled=this.automaticLevel===null||AUTO_GRAPHICS[this.automaticLevel].bloom;
   }
   private updateClarity(){
     if(!this.renderer||!this.grade)return;
@@ -118,6 +123,8 @@ export class RenderSystem {
         powerPreference: "high-performance",
         preserveDrawingBuffer: false,
       });
+      this.renderer.info.autoReset=false;
+      this.gpuTimer=new GpuTimer(this.renderer.getContext() as WebGL2RenderingContext);
       this.renderer.outputColorSpace = T.SRGBColorSpace;
       this.renderer.toneMapping = T.ACESFilmicToneMapping;
       this.renderer.toneMappingExposure = this.exposure;
@@ -154,28 +161,34 @@ export class RenderSystem {
       this.fxaa = new ShaderPass(FXAAShader);
       this.composer.addPass(this.fxaa);
     }
+    if(settings.autoGraphics)this.automaticLevel=1;
     this.applyQuality();
     this.updateAtmosphere(0, new T.Vector3());
     this.resize();
     addEventListener("resize", () => this.resize());
   }
+  setAutomaticLevel(level:number|null){
+    if(level===this.automaticLevel)return;
+    this.automaticLevel=level;this.gpuTimer?.reset();this.applyQuality();
+  }
   applyQuality() {
     if (!this.renderer) return;
-    const size=Math.min(4096,this.renderer.capabilities.maxTextureSize||4096);
+    const profile=this.automaticLevel===null?null:AUTO_GRAPHICS[this.automaticLevel];
+    const size=Math.min(profile?Math.max(512,profile.shadow):4096,this.renderer.capabilities.maxTextureSize||4096);
     if(this.sun.shadow.mapSize.x!==size){
       this.sun.shadow.mapSize.set(size,size);
       this.sun.shadow.map?.dispose();
       this.sun.shadow.map=null;
     }
-    this.renderer.shadowMap.enabled=true;
+    this.renderer.shadowMap.enabled=!profile||profile.shadow>0;
     this.clouds.visible=true;
-    // Every preset has the same display-density image (up to 2x CSS resolution).
-    this.renderer.setPixelRatio(Math.max(1,Math.min(devicePixelRatio,2)));
+    // Auto can trim supersampling, but never renders below CSS resolution.
+    this.renderer.setPixelRatio(Math.max(1,Math.min(devicePixelRatio,profile?.pixelRatio??2)));
     this.resolutionScale=1;
     this.applyEffects();
     if(this.composer){
       this.composer.setPixelRatio(this.renderer.getPixelRatio());
-      const samples=Math.min(4,this.renderer.capabilities.maxSamples);
+      const samples=Math.min(profile?.samples??4,this.renderer.capabilities.maxSamples);
       for(const target of [this.composer.renderTarget1,this.composer.renderTarget2]){
         if(target.samples!==samples){target.samples=samples;target.dispose();}
       }
@@ -256,7 +269,9 @@ export class RenderSystem {
   render(_hero: T.Object3D, _garage = false, _stationary = false) {
     if (!this.renderer) return;
     this.renderer.toneMappingExposure = this.exposure;
-    this.composer!.render();
+    this.renderer.info.reset();
+    this.gpuTimer?.begin();
+    try{this.composer!.render();}finally{this.gpuTimer?.end();}
   }
   capture() {
     return this.canvas.toDataURL("image/png");

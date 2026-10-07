@@ -1,3 +1,4 @@
+import {AutoGraphics,FramePacer} from "./AutoGraphics";
 import {applyDistancePreset} from "./GraphicsPresets";
 import {DriverAvatar,loadDriverAvatar} from '../player/DriverAvatar';
 import {CornerGuide} from '../vehicles/CornerGuide';
@@ -57,6 +58,9 @@ const stopped: Controls = {
 export class Game {
   save = new SaveManager();
   input = new InputManager();
+  autoGraphics=new AutoGraphics();
+  private framePacer=new FramePacer();
+  private worldSettings={...this.save.settings};
   roads = new RoadNetwork();
   autopilot = new Autopilot(this.roads);
   avatar!:DriverAvatar;
@@ -177,6 +181,7 @@ export class Game {
     this.ui.onAction = (a) => void this.action(a);
     this.ui.onSetting = (k, v) => {
       if((k==="weather"||k==="rainIntensity")&&(this.race?.active||this.network?.raceLocked)){this.ui.toast("Change weather before the next race");this.ui.sync();return;}
+      if(["quality","renderDistance","simulationDistance"].includes(k))this.save.settings.autoGraphics=false;
       (this.save.settings as any)[k] = v;
       if (k === "autopilotMode") {
         this.autopilotManualReady = false;
@@ -214,7 +219,8 @@ export class Game {
       this.ui.onFootLook = (x, y) => this.camera.lookFoot(x, y);
       this.ui.loading("LOADING WORLD");
       await new Promise((r) => requestAnimationFrame(r));
-      this.world = await new World(this.roads, this.physics, this.save.settings).init(f=>loadingProgress("world",f));
+      this.syncWorldSettings();
+      this.world = await new World(this.roads, this.physics, this.worldSettings).init(f=>loadingProgress("world",f));
       this.render.scene.add(this.world.root);
       this.boosts = new BoostManager(this.roads);
       this.coins=new CoinManager(this.roads,this.save);
@@ -310,6 +316,13 @@ export class Game {
     this.vehicle.applyLoadout(this.save.loadout,this.save.setup);
     this.autopilot.disable();this.syncCar(1);this.avatar.occupy(this.car,spec);
   }
+  private syncWorldSettings(){
+    Object.assign(this.worldSettings,this.save.settings);
+    if(this.save.settings.autoGraphics)Object.assign(this.worldSettings,this.autoGraphics.distances,{quality:this.autoGraphics.profile.quality});
+  }
+  private graphicsStatus(){
+    this.ui.graphicsStatus(this.save.settings.autoGraphics?`Auto · ${this.autoGraphics.profile.label} · target ${this.autoGraphics.targetFps} FPS · ${this.worldSettings.renderDistance} m render / ${this.worldSettings.simulationDistance} m simulation`:"Manual graphics · automatic adjustment off");
+  }
   applySettings(changed = "") {
     if (!this.car) return;
     this.car.paint.color.set(this.save.settings.paint);
@@ -322,9 +335,12 @@ export class Game {
       0.6,
       0.96,
     );
+    if(changed==="autoGraphics"){this.autoGraphics.restart();this.framePacer.reset();}
+    this.render.setAutomaticLevel(this.save.settings.autoGraphics?this.autoGraphics.level:null);
     if(changed==="quality")applyDistancePreset(this.save.settings);
-    if(changed==="quality"||changed==="renderDistance"||changed==="simulationDistance")this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);
-    this.ui.sync();
+    this.syncWorldSettings();
+    if(changed==="autoGraphics"||changed==="quality"||changed==="renderDistance"||changed==="simulationDistance")this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);
+    this.ui.sync();this.graphicsStatus();
   }
   setState(state: State) {
     if(state==="activities")this.activitiesPrevious=this.state;
@@ -699,13 +715,16 @@ export class Game {
   }
   frame(now: number) {
     if (!this.running) return;
+    const automatic=this.save.settings.autoGraphics;
+    if(document.hidden){this.last=now;this.framePacer.reset();this.autoGraphics.suspend();requestAnimationFrame(this.nextFrame);return;}
+    if(automatic&&!this.framePacer.ready(now,this.autoGraphics.targetFps)){requestAnimationFrame(this.nextFrame);return;}
     const cpuStart=performance.now();this.physicsMs=0;
     const elapsedFrame=(now-this.last)/1000;
     const dt = Math.max(0, Math.min(1/15, elapsedFrame));
-    this.render.adaptResolution(elapsedFrame,this.state==="drive");
+
     this.last = now;
     this.elapsed += dt;
-    this.fps = damp(this.fps, 1 / Math.max(0.001, dt), 2, dt);
+    this.fps = damp(this.fps, 1 / Math.max(0.001, elapsedFrame), 2, dt);
     const controls = this.input.read(dt);
     this.keys();
     const driving = this.state === "drive";
@@ -744,9 +763,9 @@ export class Game {
         this.traffic.update(
           step,
           this.vehicle.position,
-          this.save.settings.quality,
-          this.save.settings.simulationDistance,
-          this.save.settings.renderDistance,
+          this.worldSettings.quality,
+          this.worldSettings.simulationDistance,
+          this.worldSettings.renderDistance,
           this.camera.mode===6?this.camera.freePosition:this.vehicle.position,
         );
         this.race.update(step, this.vehicle);
@@ -805,7 +824,7 @@ export class Game {
       const step=this.physicsClock.step,walk=this.input.readFoot();
       this.physicsClock.begin(elapsedFrame,performance.now());
       while(this.physicsClock.take(performance.now())){
-        this.traffic.update(step,this.foot.position,this.save.settings.quality,this.save.settings.simulationDistance,this.save.settings.renderDistance,this.foot.position);
+        this.traffic.update(step,this.foot.position,this.worldSettings.quality,this.worldSettings.simulationDistance,this.worldSettings.renderDistance,this.foot.position);
         this.race.update(step,this.vehicle);
         this.foot.preStep(walk,this.camera.orbitYaw,step);
         const stepStart=performance.now();this.physics.world.step();this.physicsMs+=performance.now()-stepStart;this.foot.postStep();
@@ -829,6 +848,7 @@ export class Game {
       this.input.readCamera(),
     );
     this.updateNetwork(now,dt);
+    this.worldSettings.hour=this.save.settings.hour;this.worldSettings.weather=this.save.settings.weather;this.worldSettings.rainIntensity=this.save.settings.rainIntensity;
     this.render.updateAtmosphere(this.elapsed, this.foot.active?this.foot.position:this.vehicle.position);
     if (this.state === "garage" || this.state === "workshop") {
       (this.render.scene.fog as T.FogExp2).density = 0;
@@ -855,8 +875,9 @@ export class Game {
     this.frames++;this.hudClock+=dt;
     if (this.hudClock>=.1){
       this.guide.update(this.vehicle,driving&&!this.foot.active&&this.save.settings.cornerGuide!=="off",this.race.active?this.race.route:undefined);this.ui.guide(this.guide,driving&&!this.foot.active);
-      this.ui.diagnostics(this.diagnostics,this.debug||this.save.settings.diagnostics,this.render.renderer?.info.render.calls||0,this.render.renderer?.info.render.triangles||0);
+      this.ui.diagnostics(this.diagnostics,this.debug||this.save.settings.diagnostics,this.render.renderer?.info.render.calls||0,this.render.renderer?.info.render.triangles||0,this.render.gpuMs);
       if(this.state==="garage")document.getElementById("repair-price")!.textContent=this.save.settings.repairCosts?`Repair · ${this.repairPrice()} coins`:"Cosmetic repair · free";
+      this.graphicsStatus();
       this.ui.autopilotStatus(this.autopilot.enabled);
       this.hudClock%=.1;
       this.ui.routeChoice(undefined);
@@ -871,7 +892,11 @@ export class Game {
     }
     this.guide.root.visible=this.guide.root.visible&&driving&&!this.foot.active;this.finishes.get(this.car)?.update();
     const renderStart=performance.now();this.render.render(this.car.root, this.state === "garage" || this.state === "workshop",!driving);
-    this.diagnostics.record(elapsedFrame*1000,this.physicsMs,performance.now()-renderStart,performance.now()-cpuStart);
+    const cpuMs=performance.now()-cpuStart;
+    this.diagnostics.record(elapsedFrame*1000,this.physicsMs,performance.now()-renderStart,cpuMs);
+    if(automatic&&this.autoGraphics.observe(elapsedFrame*1000,cpuMs,this.render.gpuMs,this.state==="drive"&&!this.preparingWorld)){
+      this.render.setAutomaticLevel(this.autoGraphics.level);this.syncWorldSettings();this.framePacer.reset();this.graphicsStatus();
+    }
     requestAnimationFrame(this.nextFrame);
   }
   persist(checkpoint=false) {
@@ -913,8 +938,8 @@ export class Game {
                 gear: this.vehicle.gear,
                 camera:this.camera.mode,autopilot:this.autopilot.enabled,drift:this.autopilot.drift.phase,autopilotMode:this.save.settings.autopilotMode,
                 position:{x:this.vehicle.position.x,y:this.vehicle.position.y,z:this.vehicle.position.z},
-                renderDistance:this.save.settings.renderDistance,simulationDistance:this.save.settings.simulationDistance,
-                graphics:{preset:this.save.settings.quality,pixelRatio:this.render.renderer?.getPixelRatio(),buffer:[this.render.canvas.width,this.render.canvas.height],shadowSize:this.render.sun.shadow.mapSize.x,ao:this.render.ao?.enabled,bloom:this.render.bloom?.enabled,samples:this.render.composer?.renderTarget1.samples,sharpness:this.render.grade?.uniforms.sharpness.value},
+                renderDistance:this.worldSettings.renderDistance,simulationDistance:this.worldSettings.simulationDistance,
+                graphics:{automatic:this.save.settings.autoGraphics,targetFps:this.save.settings.autoGraphics?this.autoGraphics.targetFps:null,level:this.autoGraphics.level,gpuMs:this.render.gpuMs,preset:this.worldSettings.quality,pixelRatio:this.render.renderer?.getPixelRatio(),buffer:[this.render.canvas.width,this.render.canvas.height],shadowSize:this.render.sun.shadow.mapSize.x,ao:this.render.ao?.enabled,bloom:this.render.bloom?.enabled,samples:this.render.composer?.renderTarget1.samples,sharpness:this.render.grade?.uniforms.sharpness.value},
                 cornerGuide:this.save.settings.cornerGuide,autopilotRoutes:this.save.settings.autopilotRoutes,
                 location: this.roads.region(
                   this.vehicle.position.x,
