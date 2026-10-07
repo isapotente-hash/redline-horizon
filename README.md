@@ -158,18 +158,18 @@ Automatic graphics is on by default for new and existing profiles. It measures a
 
 Auto never drops rendering below one pixel per CSS pixel and retains existing textures, materials, sharpness and lighting. It can reduce supersampling above that floor. At its lowest tier, ambient occlusion, bloom and shadow rendering are off; higher tiers restore them. Settings shows the active tier, FPS target and effective distances. Choosing a manual preset or distance disables Auto, and manual preferences survive automatic adjustments and reloads. Re-enabling Auto starts a fresh calibration; no device-name guessing or hardware fingerprinting is used.
 
-Frame pacing supports 60/90/120/144 Hz displays without changing the fixed physics timestep. The performance overlay counts all render passes instead of only the final fullscreen pass, and shows GPU milliseconds when supported. GPU queries are bounded, read only after completion, and discarded after disjoint events or tier changes.
+Frame pacing supports 60/90/120/144 Hz displays without changing the fixed physics timestep. The FPS overlay shares the coins’ aqua text and fade. Internal performance measurements still count all render passes and use GPU milliseconds when supported. GPU queries are bounded, read only after completion, and discarded after disjoint events or tier changes.
 
 Manual presets use the same display-density rendering (up to 2× CSS resolution), 4× hardware antialiasing where supported, full-resolution ambient occlusion, restrained bloom, sharpened output, shadows up to 4096px, clouds, grass density, nearby tree detail and road texture filtering. Manual preset changes never resize render buffers or toggle visual effects. Hardware limits apply equally to every preset. Weather remains a separate setting.
 
 | Preset | Render distance | Simulation distance |
 | --- | ---: | ---: |
-| Very Low | 100m | 50m |
+| Very Low | 10m | 10m |
 | Low | 500m | 150m |
 | Medium | 1000m | 350m |
 | High | 1600m | 600m |
 | Ultra | 3000m | 1000m |
 
-Distance sliders can override these budgets, and custom distances survive reload. Old saves without distance values get their selected preset's budget. Scenery residency, grass range and traffic activity follow distance rather than the preset name. Removing half-resolution rendering, stacked FXAA on MSAA hardware and short-range haze keeps Very Low sharp. The game continues to use its existing vehicle, character and scenery assets.
+Both distance sliders start at 10m, with 5m steps. Auto uses the same 10m Very Low budget under sustained overload. Nearby ground collision retains its safety margin across terrain tile edges. Distance sliders can override these budgets, and custom distances survive reload. Old saves without distance values get their selected preset's budget. Scenery residency, grass range and traffic activity follow distance rather than the preset name. Removing half-resolution rendering, stacked FXAA on MSAA hardware and short-range haze keeps Very Low sharp. The game continues to use its existing vehicle, character and scenery assets.
 
 Autopilot route selection is removed from Settings and gameplay; autopilot follows its automatic route. Braking warnings and braking markers default to Off, including a one-time migration of old saves. Players can explicitly enable corner guidance later, and that preference persists.

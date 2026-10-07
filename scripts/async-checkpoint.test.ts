@@ -42,7 +42,7 @@ test('a setting change during checkpoint loading wins over an older asynchronous
 });
 test('corrupt checkpoint fields use existing validation; future schemas and disk errors are nonfatal',async()=>{
  const local=storage(seed()),backend=new MemoryStore();backend.data={...seed(),savedAt:Date.now(),coins:-5,position:{x:NaN,y:0,z:0,yaw:0},settings:{quality:'bad',simulationDistance:0}};
- const save=new SaveManager(backend);assert.equal(await save.restoreCheckpoint(),true);assert.equal(save.coins,0);assert.equal(save.position,null);assert.equal(save.settings.simulationDistance,50);
+ const save=new SaveManager(backend);assert.equal(await save.restoreCheckpoint(),true);assert.equal(save.coins,0);assert.equal(save.position,null);assert.equal(save.settings.simulationDistance,10);
  backend.data={...backend.data,schemaVersion:99};const before=local.data.get(SAVE_KEY),future=new SaveManager(backend);assert.equal(await future.restoreCheckpoint(),false);assert.equal(await future.saveAsync(),false);assert.equal(future.save(),false);assert.equal(local.data.get(SAVE_KEY),before);
  storage(seed());const failure=new SaveManager({read:async()=>{throw Error('denied');},write:async()=>{throw Error('quota');}});let errors=0;failure.onError=()=>errors++;assert.equal(await failure.restoreCheckpoint(),false);assert.equal(await failure.saveAsync(),false);assert.equal(await failure.saveAsync(),false);assert.equal(errors,1);
 });

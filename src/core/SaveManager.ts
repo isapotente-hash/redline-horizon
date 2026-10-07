@@ -62,7 +62,7 @@ function validSettings(value:unknown):Settings {
   const result={...defaults}, a=record(value)?value:{};
   for(const key of ['autoGraphics','cycle','automatic','traction','stability','diagnostics','repairCosts'] as const)
     if(typeof a[key]==='boolean')result[key]=a[key];
-  const bounds={rainIntensity:[0,1],cameraMotion:[0,1],renderDistance:[100,3000],simulationDistance:[50,1000],autopilotSpeed:[30,180],hour:[0,24],volume:[0,1],tint:[0,1],camera:[0,6]} as const;
+  const bounds={rainIntensity:[0,1],cameraMotion:[0,1],renderDistance:[10,3000],simulationDistance:[10,1000],autopilotSpeed:[30,180],hour:[0,24],volume:[0,1],tint:[0,1],camera:[0,6]} as const;
   for(const key of Object.keys(bounds) as (keyof typeof bounds)[])
     if(Number.isFinite(a[key]))result[key]=Math.max(bounds[key][0],Math.min(bounds[key][1],a[key]));
   result.camera=Math.floor(result.camera);

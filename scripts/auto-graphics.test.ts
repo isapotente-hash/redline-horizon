@@ -9,7 +9,7 @@ test('a strong device reaches Extra High at 60 FPS with maximum distances',()=>{
  const a=new AutoGraphics();run(a,100,[3,4,6,7,10]);assert.equal(a.level,4);assert.equal(a.targetFps,60);assert.equal(a.profile.label,'Extra High');assert.deepEqual(a.distances,{renderDistance:3000,simulationDistance:1000});
 });
 test('a weak device reduces GPU work then settles at 30 FPS without recurring failed upgrades',()=>{
- const a=new AutoGraphics();run(a,30,[24,42,55,80,120]);assert.equal(a.level,0);assert.equal(a.targetFps,30);assert.equal(run(a,180,[24,42,55,80,120]),0);assert.equal(a.targetFps,30);assert.equal(a.profile.pixelRatio,1);
+ const a=new AutoGraphics();run(a,30,[24,42,55,80,120]);assert.equal(a.level,0);assert.deepEqual(a.distances,{renderDistance:10,simulationDistance:10});assert.equal(a.targetFps,30);assert.equal(run(a,180,[24,42,55,80,120]),0);assert.equal(a.targetFps,30);assert.equal(a.profile.pixelRatio,1);
 });
 test('thermal slowdown triggers a reduction, and cooling eventually restores quality and 60 FPS',()=>{
  const a=new AutoGraphics();run(a,100,[3,4,6,7,10]);run(a,45,[24,42,55,80,120]);assert.equal(a.level,0);assert.equal(a.targetFps,30);run(a,240,[3,4,6,7,10]);assert.equal(a.targetFps,60);assert.equal(a.level,4);
@@ -42,3 +42,12 @@ test('every automatic tier retains full CSS resolution and valid ascending world
 });
 
 test('persistent extremely slow rendering is reduced instead of being mistaken for isolated stalls',()=>{const a=new AutoGraphics();for(let n=0;n<40;n++)a.observe(900,100,600,true);assert.equal(a.level,0);assert.equal(a.targetFps,30);});
+
+test('minimum manual distances survive saving while Auto can fall back to them and recover',()=>{
+ let data=JSON.stringify({coins:75400,settings:{autoGraphics:false,quality:'high',renderDistance:10,simulationDistance:10}});
+ Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:(key:string)=>key===SAVE_KEY?data:null,setItem:(key:string,v:string)=>{if(key===SAVE_KEY)data=v;}}});
+ const save=new SaveManager();assert.deepEqual([save.settings.renderDistance,save.settings.simulationDistance],[10,10]);save.settings.autoGraphics=true;save.save();
+ const a=new AutoGraphics();run(a,30,[24,42,55,80,120]);assert.deepEqual(a.distances,{renderDistance:10,simulationDistance:10});
+ run(a,240,[3,4,6,7,10]);assert.equal(a.level,4);assert.deepEqual(a.distances,{renderDistance:3000,simulationDistance:1000});
+ const restored=new SaveManager();assert.equal(restored.settings.autoGraphics,true);assert.deepEqual([restored.settings.renderDistance,restored.settings.simulationDistance],[10,10]);
+});

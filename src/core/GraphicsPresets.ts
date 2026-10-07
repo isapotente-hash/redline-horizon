@@ -1,7 +1,7 @@
 export type GraphicsQuality = 'very-low' | 'low' | 'medium' | 'high' | 'ultra';
 /** Presets change world budgets only; resolution, materials and effects are shared. */
 export const GRAPHICS_PRESETS = {
-  'very-low': {renderDistance:100, simulationDistance:50},
+  'very-low': {renderDistance:10, simulationDistance:10},
   low: {renderDistance:500, simulationDistance:150},
   medium: {renderDistance:1000, simulationDistance:350},
   high: {renderDistance:1600, simulationDistance:600},

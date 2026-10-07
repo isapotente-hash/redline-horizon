@@ -14,7 +14,7 @@ test('preset changes alter only distances, keep custom world/vehicle preferences
   assert.ok(settings.renderDistance>previousRender);assert.ok(settings.simulationDistance>previousSim);
   previousRender=settings.renderDistance;previousSim=settings.simulationDistance;
  }
- assert.deepEqual(GRAPHICS_PRESETS['very-low'],{renderDistance:100,simulationDistance:50});
+ assert.deepEqual(GRAPHICS_PRESETS['very-low'],{renderDistance:10,simulationDistance:10});
  assert.deepEqual(GRAPHICS_PRESETS.ultra,{renderDistance:3000,simulationDistance:1000});
 });
 test('legacy preset-only saves get their distance budget; explicit custom distances survive reload',()=>{
@@ -29,7 +29,7 @@ test('route chooser and automatic visual downgrades stay removed; braking assist
 });
 test('world residency at matching distances is independent of the graphics preset name',()=>{
  const world=Object.create(World.prototype) as World;
- for(const renderDistance of [100,500,1600,3000])for(const simulationDistance of [50,1000]){
+ for(const renderDistance of [10,100,500,1600,3000])for(const simulationDistance of [10,50,1000]){
   const radii=[];for(const quality of ['very-low','low','medium','high','ultra'] as const){world.settings={...defaults,quality,renderDistance,simulationDistance};radii.push([world.visualRadius,world.residentRadius]);}
   assert.ok(radii.every(r=>r[0]===radii[0][0]&&r[1]===radii[0][1]));
  }

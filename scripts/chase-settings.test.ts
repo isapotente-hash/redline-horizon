@@ -12,7 +12,7 @@ function storage(value:any){let stored=JSON.stringify(value);Object.defineProper
 test('distance settings migrate, clamp invalid values and persist independently of graphics quality',()=>{
  storage({settings:{quality:'low'}});const save=new SaveManager();assert.equal(save.settings.renderDistance,500);assert.equal(save.settings.simulationDistance,150);
  save.settings.renderDistance=2300;save.settings.simulationDistance=350;save.save();const again=new SaveManager();assert.equal(again.settings.renderDistance,2300);assert.equal(again.settings.simulationDistance,350);
- storage({settings:{renderDistance:99999,simulationDistance:-4}});const invalid=new SaveManager();assert.equal(invalid.settings.renderDistance,3000);assert.equal(invalid.settings.simulationDistance,50);
+ storage({settings:{renderDistance:99999,simulationDistance:-4}});const invalid=new SaveManager();assert.equal(invalid.settings.renderDistance,3000);assert.equal(invalid.settings.simulationDistance,10);
 });
 test('camera keys cannot override any assistance mode; manual driving keys remain independent',()=>{
  (globalThis as any).addEventListener=()=>{};Object.defineProperty(globalThis,'navigator',{configurable:true,value:{getGamepads:()=>[]}});
