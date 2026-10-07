@@ -875,7 +875,7 @@ export class Game {
     this.frames++;this.hudClock+=dt;
     if (this.hudClock>=.1){
       this.guide.update(this.vehicle,driving&&!this.foot.active&&this.save.settings.cornerGuide!=="off",this.race.active?this.race.route:undefined);this.ui.guide(this.guide,driving&&!this.foot.active);
-      this.ui.diagnostics(this.diagnostics,this.debug||this.save.settings.diagnostics,this.render.renderer?.info.render.calls||0,this.render.renderer?.info.render.triangles||0,this.render.gpuMs);
+      this.ui.fpsDisplay(this.fps,this.debug||this.save.settings.diagnostics);
       if(this.state==="garage")document.getElementById("repair-price")!.textContent=this.save.settings.repairCosts?`Repair · ${this.repairPrice()} coins`:"Cosmetic repair · free";
       this.graphicsStatus();
       this.ui.autopilotStatus(this.autopilot.enabled);
@@ -886,8 +886,6 @@ export class Game {
         this.vehicle,
         this.race,
         this.camera,
-        this.fps,
-        this.debug,
       );
     }
     this.guide.root.visible=this.guide.root.visible&&driving&&!this.foot.active;this.finishes.get(this.car)?.update();
