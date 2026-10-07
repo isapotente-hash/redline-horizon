@@ -1,4 +1,4 @@
-import {readFile,writeFile,copyFile,mkdir,rm} from 'node:fs/promises';
+import {readFile,writeFile,copyFile,mkdir,rm,readdir} from 'node:fs/promises';
 import path from 'node:path';
 const root=path.resolve(import.meta.dirname,'..');
 const manifest=JSON.parse(await readFile(path.join(root,'dist/.vite/manifest.json'),'utf8'));
@@ -10,6 +10,8 @@ for(const entry of Object.values(manifest)){
  files.add(entry.file);
  for(const file of [...entry.css||[],...entry.assets||[]])files.add(file);
 }
+// Vite emits worker JavaScript outside its main manifest. Publish and retain it too.
+for(const file of await readdir(path.join(root,'dist/assets')))if(file.endsWith('.js'))files.add(`assets/${file}`);
 // Keep recent hashed assets: Pages may serve a cached entry page during an update.
 const allowed=file=>typeof file==='string'&&!file.includes('..')&&!path.isAbsolute(file)&&
  (['index.html','favicon.svg','redline-logo.png'].includes(file)||/^assets\/[\w.-]+\.(js|css|glb|bin|wasm|png|svg|webp)$/.test(file));

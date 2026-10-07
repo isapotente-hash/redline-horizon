@@ -24,6 +24,7 @@ export type Settings = {
   hour: number;
   cycle: boolean;
   volume: number;
+  music:boolean;
   automatic: boolean;
   traction: boolean;
   stability: boolean;
@@ -49,6 +50,7 @@ export const defaults: Settings = {
   hour: 17.3,
   cycle: false,
   volume: 0.4,
+  music: true,
   automatic: true,
   traction: true,
   stability: true,
@@ -60,7 +62,7 @@ export const defaults: Settings = {
 };
 function validSettings(value:unknown):Settings {
   const result={...defaults}, a=record(value)?value:{};
-  for(const key of ['autoGraphics','cycle','automatic','traction','stability','diagnostics','repairCosts'] as const)
+  for(const key of ['music','autoGraphics','cycle','automatic','traction','stability','diagnostics','repairCosts'] as const)
     if(typeof a[key]==='boolean')result[key]=a[key];
   const bounds={rainIntensity:[0,1],cameraMotion:[0,1],renderDistance:[10,3000],simulationDistance:[10,1000],autopilotSpeed:[30,180],hour:[0,24],volume:[0,1],tint:[0,1],camera:[0,6]} as const;
   for(const key of Object.keys(bounds) as (keyof typeof bounds)[])

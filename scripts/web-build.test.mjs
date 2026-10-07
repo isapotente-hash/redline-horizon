@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {readFile,stat,mkdtemp,mkdir,writeFile,copyFile,rm} from 'node:fs/promises';import {createHash} from 'node:crypto';import {tmpdir} from 'node:os';import {join} from 'node:path';import {spawnSync} from 'node:child_process';
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile,stat,mkdtemp,mkdir,writeFile,copyFile,rm,readdir} from 'node:fs/promises';import {createHash} from 'node:crypto';import {tmpdir} from 'node:os';import {join} from 'node:path';import {spawnSync} from 'node:child_process';
 const root=new URL('../dist/',import.meta.url),manifest=JSON.parse(await readFile(new URL('.vite/manifest.json',root)));
 test('web entry is small and every built resource resolves without embedded model/physics bytes',async()=>{
  const html=await readFile(new URL('index.html',root),'utf8');assert.ok(Buffer.byteLength(html)<5000);assert.match(html,/startup-bar/);assert.match(html,/startup-percent/);
@@ -15,6 +15,12 @@ test('web entry is small and every built resource resolves without embedded mode
   if(entry.file.endsWith('.wasm')){wasm++;assert.ok(WebAssembly.validate(bytes));}
  }
  assert.equal(parts.length,30);assert.ok(parts.every(Boolean));const reconstructed=Buffer.concat(parts),originalRacer=await readFile(new URL('../assets/characters/RACER.glb',import.meta.url));assert.deepEqual(reconstructed,originalRacer);models++;assert.equal(models,4);assert.equal(wasm,1);assert.ok(scriptBytes<1500000,`JS unexpectedly large: ${scriptBytes}`);console.log({entryBytes:Buffer.byteLength(html),scriptBytes,models,wasm});
+});
+test('the soundtrack worker ships with the release even though Vite omits it from the main manifest',async()=>{
+ const workers=(await readdir(new URL('assets/',root))).filter(file=>/^SoundtrackWorker-.*\.js$/.test(file));assert.equal(workers.length,1);
+ const released=JSON.parse(await readFile(new URL('../.release-manifest.json',import.meta.url)));
+ const file='assets/'+workers[0];assert.ok(released.includes(file));assert.deepEqual(await readFile(new URL(file,root)),await readFile(new URL('../'+file,import.meta.url)));
+ assert.ok((await readFile(new URL(manifest['index.html'].file,root),'utf8')).includes(workers[0]));
 });
 test('stale build entry cannot overwrite the published page',async()=>{
  const folder=await mkdtemp(join(tmpdir(),'redline-publish-'));

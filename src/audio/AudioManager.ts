@@ -1,6 +1,10 @@
 import { VehiclePhysics } from "../physics/VehiclePhysics";
 import { Settings } from "../core/SaveManager";
+import {RacingSoundtrack} from './RacingSoundtrack';
 export class AudioManager {
+  private soundtrack?:RacingSoundtrack;
+  private musicEnabled=true;private musicVolume=.4;private musicPlaying=false;
+  music(enabled:boolean,volume:number,playing:boolean){this.musicEnabled=enabled;this.musicVolume=volume;this.musicPlaying=playing;this.soundtrack?.configure(enabled,volume,playing);}
   context: AudioContext | null = null;
   master?: GainNode;
   engine?: GainNode;
@@ -107,6 +111,8 @@ export class AudioManager {
       h.connect(this.hornGain);
       h.start();
     }
+    this.soundtrack=new RacingSoundtrack(a,compressor);
+    this.soundtrack.configure(this.musicEnabled,this.musicVolume,this.musicPlaying);
   }
   siren(active:boolean,distance:number) {
     if(!this.context||!this.sirenGain||!this.sirenOsc)return;

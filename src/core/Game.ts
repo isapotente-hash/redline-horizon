@@ -198,7 +198,7 @@ export class Game {
     addEventListener("blur", () => {
       if (this.state === "drive") this.setState("pause");
     });
-    document.addEventListener("visibilitychange", () => { if(document.hidden){this.persist();this.physicsClock.reset();} });
+    document.addEventListener("visibilitychange", () => { if(document.hidden){this.persist();this.physicsClock.reset();}this.syncMusic(); });
     addEventListener("pagehide", () => {this.persist();this.network.leave(false);});
     addEventListener("beforeunload", () => this.persist());
   }
@@ -323,6 +323,7 @@ export class Game {
   private graphicsStatus(){
     this.ui.graphicsStatus(this.save.settings.autoGraphics?`Auto · ${this.autoGraphics.profile.label} · target ${this.autoGraphics.targetFps} FPS · ${this.worldSettings.renderDistance} m render / ${this.worldSettings.simulationDistance} m simulation`:"Manual graphics · automatic adjustment off");
   }
+  private syncMusic(){this.audio.music(this.save.settings.music,this.save.settings.volume,this.state==='drive'&&!this.preparingWorld&&!document.hidden);}
   applySettings(changed = "") {
     if (!this.car) return;
     this.car.paint.color.set(this.save.settings.paint);
@@ -341,6 +342,7 @@ export class Game {
     this.syncWorldSettings();
     if(changed==="autoGraphics"||changed==="quality"||changed==="renderDistance"||changed==="simulationDistance")this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);
     this.ui.sync();this.graphicsStatus();
+    this.syncMusic();
   }
   setState(state: State) {
     if(state==="activities")this.activitiesPrevious=this.state;
@@ -379,6 +381,7 @@ export class Game {
       this.render.studio.rotation.y = this.car.root.rotation.y;
     }
     if (state === "drive") this.audio.start();
+    this.syncMusic();
   }
   private async prepareWorld(){
     this.preparingWorld=true;this.setState("loading");this.ui.loading("LOADING AREA");
