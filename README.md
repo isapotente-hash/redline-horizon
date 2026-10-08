@@ -182,10 +182,10 @@ The boost signal replaces the old boost text above the speedometer. An angled aq
 
 Full autopilot previews bends at 8m intervals over at least 100m (or five seconds of travel), brakes for the tighter curvature, and moves its line inward through bends. Predicted lateral travel and the vehicle footprint reserve clearance from the road edge. Eligible cars use bounded physical handbrake flicks with yaw damping, release early if clearance is lost, and recover with countersteering. Rain, traffic, narrow clearance, motorcycles and the pickup use the grip/braking path instead of forcing a drift. Partial assists preserve the player’s manual controls. Walled-bend regression tests run at the game’s 60 Hz simulation rate.
 
-## Traffic safety and pause dashboard
+## Traffic safety
 
 Traffic uses a speed-dependent safety range independently of scenery distance. Six seconds of closing-speed visibility plus boosted braking room keeps traffic visible at speed, including the 10m Auto tier. A separate residency buffer prevents boundary flicker. Cars spawn beyond the visibility range, with road-end validation and vehicle spacing; failed candidates remain disabled. Recycling resets the physical pose before enabling contact, and nearby wrecks remain physical until out of sight. Free-camera visibility remains separate from driver simulation. Traffic updates before each autopilot decision so new residents are included immediately. Race grid visibility and opponent recovery are preserved.
 
-Pause now opens a responsive dashboard with an aqua Resume control, selected vehicle/session details, six driving/navigation tiles and access to controls, multiplayer and the main menu. All existing actions retain their behavior.
+The pause screen uses the original menu. The dashboard design was removed; new proposals are reviewed separately before implementation.
 
 Validation: 236 full-suite regressions, 19 final traffic/assist/pursuit checks including 360 km/h streaming and race-grid visibility, four build-integrity checks, and production WebGL screenshots and navigation checks on desktop and phone. Hardware frame rates and live multiplayer latency are not measured by these checks.
