@@ -1,4 +1,5 @@
 import {AutoGraphics,FramePacer} from "./AutoGraphics";
+import {graphicsPresentation} from "./GraphicsPresentation";
 import {applyDistancePreset} from "./GraphicsPresets";
 import {DriverAvatar,loadDriverAvatar} from '../player/DriverAvatar';
 import {CornerGuide} from '../vehicles/CornerGuide';
@@ -214,6 +215,7 @@ export class Game {
         document.getElementById("game") as HTMLCanvasElement,
         this.save.settings,
         this.uiCheck,
+        0,
       );
       this.camera = new CameraManager(this.render.camera, this.render.canvas, mobileDevice());
       this.ui.onFootLook = (x, y) => this.camera.lookFoot(x, y);
@@ -318,10 +320,13 @@ export class Game {
   }
   private syncWorldSettings(){
     Object.assign(this.worldSettings,this.save.settings);
-    if(this.save.settings.autoGraphics)Object.assign(this.worldSettings,this.autoGraphics.distances,{quality:this.autoGraphics.profile.quality});
+    const {level,...presentation}=graphicsPresentation(this.save.settings,this.autoGraphics.level,this.state==='drive'||this.state==='photo'||this.preparingWorld);
+    Object.assign(this.worldSettings,presentation);
+    return level;
   }
   private graphicsStatus(){
-    this.ui.graphicsStatus(this.save.settings.autoGraphics?`Auto · ${this.autoGraphics.profile.label} · target ${this.autoGraphics.targetFps} FPS · ${this.worldSettings.renderDistance} m render / ${this.worldSettings.simulationDistance} m simulation`:"Manual graphics · automatic adjustment off");
+    const menu=this.state!=='drive'&&this.state!=='photo'&&!this.preparingWorld;
+    this.ui.graphicsStatus(menu?"Menu preview · Very Low · driving preferences resume when you play":this.save.settings.autoGraphics?`Auto · ${this.autoGraphics.profile.label} · target ${this.autoGraphics.targetFps} FPS · ${this.worldSettings.renderDistance} m render / ${this.worldSettings.simulationDistance} m simulation`:"Manual graphics · automatic adjustment off");
   }
   private syncMusic(){this.audio.music(this.save.settings.music,this.save.settings.volume,this.state==='drive'&&!this.preparingWorld&&!document.hidden);}
   applySettings(changed = "") {
@@ -337,9 +342,8 @@ export class Game {
       0.96,
     );
     if(changed==="autoGraphics"){this.autoGraphics.restart();this.framePacer.reset();}
-    this.render.setAutomaticLevel(this.save.settings.autoGraphics?this.autoGraphics.level:null);
     if(changed==="quality")applyDistancePreset(this.save.settings);
-    this.syncWorldSettings();
+    this.render.setAutomaticLevel(this.syncWorldSettings());
     if(changed==="autoGraphics"||changed==="quality"||changed==="renderDistance"||changed==="simulationDistance")this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);
     this.ui.sync();this.graphicsStatus();
     this.syncMusic();
@@ -352,6 +356,8 @@ export class Game {
     if (state === "garage" && this.state!=="workshop") this.garagePrevious = this.state;
     this.previous = this.state;
     this.state = state;
+    this.framePacer.reset();
+    if(this.render){this.render.setAutomaticLevel(this.syncWorldSettings());if(this.world&&this.vehicle)this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);}
     this.save.background=state==='drive';
     if(state!=='drive'){this.slipstream.reset();if(this.vehicle)this.vehicle.slipstreamStrength=0;}
     if(state!=='drive')this.playerContacts?.clear();
@@ -366,14 +372,17 @@ export class Game {
       this.camera.roll = 0;
     }
     const garage = state === "garage" || state === "workshop";
+    const worldActive=state==='drive'||state==='photo';
     this.world.root.visible = !garage;
-    this.traffic.root.visible = !garage&&!this.practice;
+    this.traffic.root.visible = worldActive&&!this.practice;
     this.race.ai.root.visible =
-      !garage && !this.race.networkRace && (this.race.active || this.race.finished);
-    this.race.gate.visible = !garage && this.race.active;
-    this.race.finish.visible = !garage && (this.race.active||this.race.finished);
-    this.particles.root.visible = !garage;
-    this.police.root.visible = !garage;
+      worldActive && !this.race.networkRace && (this.race.active || this.race.finished);
+    this.race.gate.visible = worldActive && this.race.active;
+    this.race.finish.visible = worldActive && (this.race.active||this.race.finished);
+    this.particles.root.visible = worldActive;
+    this.police.root.visible = worldActive;
+    this.boosts.root.visible=worldActive;
+    this.coins.root.visible=worldActive&&!this.practice;
     this.render.water.visible = !garage;
     this.render.studio.visible = garage;
     if (garage) {
@@ -720,7 +729,8 @@ export class Game {
     if (!this.running) return;
     const automatic=this.save.settings.autoGraphics;
     if(document.hidden){this.last=now;this.framePacer.reset();this.autoGraphics.suspend();requestAnimationFrame(this.nextFrame);return;}
-    if(automatic&&!this.framePacer.ready(now,this.autoGraphics.targetFps)){requestAnimationFrame(this.nextFrame);return;}
+    const frameLimit=this.state!=='drive'&&this.state!=='photo'&&!this.preparingWorld?30:automatic?this.autoGraphics.targetFps:0;
+    if(frameLimit&&!this.framePacer.ready(now,frameLimit)){requestAnimationFrame(this.nextFrame);return;}
     const cpuStart=performance.now();this.physicsMs=0;
     const elapsedFrame=(now-this.last)/1000;
     const dt = Math.max(0, Math.min(1/15, elapsedFrame));
@@ -896,7 +906,7 @@ export class Game {
     const cpuMs=performance.now()-cpuStart;
     this.diagnostics.record(elapsedFrame*1000,this.physicsMs,performance.now()-renderStart,cpuMs);
     if(automatic&&this.autoGraphics.observe(elapsedFrame*1000,cpuMs,this.render.gpuMs,this.state==="drive"&&!this.preparingWorld)){
-      this.render.setAutomaticLevel(this.autoGraphics.level);this.syncWorldSettings();this.framePacer.reset();this.graphicsStatus();
+      this.render.setAutomaticLevel(this.syncWorldSettings());this.framePacer.reset();this.graphicsStatus();
     }
     requestAnimationFrame(this.nextFrame);
   }

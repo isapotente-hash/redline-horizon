@@ -71,13 +71,13 @@ export class Autopilot {
     const turnA=this.roads.at(road,distance+this.direction*6),turnB=this.roads.at(road,distance+this.direction*24);
     const curvature=Math.atan2(turnA.t.z*turnB.t.x-turnA.t.x*turnB.t.z,turnA.t.x*turnB.t.x+turnA.t.z*turnB.t.z)/18;
     // Small anticipatory line adjustments stay within the road and yield to pickup/traffic planning.
-    const preferred=clamp(road.width*.23*this.direction-Math.sign(curvature)*Math.min(.8,Math.abs(curvature)*55),-road.width/2+2,road.width/2-2);
+    const preferred=clamp(road.width*.23*this.direction*(1-clamp(Math.abs(curvature)*35,0,.6)),-road.width/2+2,road.width/2-2);
     const route = navigate(road, distance, this.direction, car.speed, offset, this.lane, {
       orbs:turning||Math.abs(curvature)>.004?[]:scene.orbs,coins:turning||Math.abs(curvature)>.004?[]:scene.coins,cars:scene.cars,preferredLane:preferred,
     });
     this.target=route.target;
     this.lane += clamp(route.lane-this.lane,-3.8*dt,3.8*dt);
-    const look = clamp(8+car.speed*.48-Math.min(4,Math.abs(curvature)*140),7,32);
+    const look = clamp(6+car.speed*.4-Math.min(4,Math.abs(curvature)*140),5,28);
     const target = this.roads.at(road, distance + this.direction * look);
     const point = target.p.clone().addScaledVector(target.r, this.lane);
     const delta = point.sub(car.position);
@@ -88,6 +88,10 @@ export class Autopilot {
     if(this.drift.phase==='grip')input.steer=clamp(input.steer-car.slip*.35,-1,1);
     if (mode === "steering") {this.drift.reset();this.smoothSteer(input,dt);return input;}
     let desired = this.cornerSpeed(car,distance,speedKmh,scene);
+    const velocity=car.body.linvel(),lateralVelocity=velocity.x*here.r.x+velocity.z*here.r.z;
+    const footprint=car.chassis.halfWidth+Math.abs(car.forward.dot(here.r))*car.chassis.halfBody[2];
+    const edgeMargin=road.width/2-Math.max(Math.abs(offset),Math.abs(offset+lateralVelocity*.4))-footprint;
+    if(edgeMargin<1.2)desired=Math.min(desired,Math.max(5,car.speed-6));
     if(turning&&choice)desired=Math.min(desired,Math.sqrt(49+5*Math.max(0,choice.distance-24)));
     if (Math.abs(angle) > .6) desired = Math.min(desired, 8);
     if(Math.abs(offset)>road.width/2-1)desired=Math.min(desired,9);
@@ -100,7 +104,7 @@ export class Autopilot {
     this.speedControls(car, Math.min(desired, route.speedLimit), input);
     const structure=this.roads.structures.some(s=>s.road===road&&distance>s.start-90&&distance<s.end+90);
     const clear=!turning&&!structure&&(scene.cars||[]).every(c=>{if(c.road&&c.road!==road)return true;const gap=road.closed?wrap(c.d-distance+road.length/2,road.length)-road.length/2:c.d-distance;return Math.abs(gap)>65;})&&route.speedLimit===Infinity&&!route.target&&!this.roads.inJunction(here.p.x,here.p.z);
-    this.drift.update(car,input,{curvature,offset,width:road.width,clear,full:true},dt);
+    this.drift.update(car,input,{curvature,offset,width:road.width,edgeMargin,clear,full:true},dt);
     this.smoothSteer(input,dt);
     return input;
   }
@@ -155,8 +159,8 @@ export class Autopilot {
     const road=this.road!;
     const wet=car.settings.weather==='rain',loose=car.surface==='GRAVEL'||car.surface==='GRASS';
     const traction=loose?.55*car.tune.loose:wet?.7*car.tune.wet:car.tune.dry;
-    const lateral=(this.drift.phase==='initiate'||this.drift.phase==='hold'?4.0:3.6)*clamp(traction*Math.sqrt(car.spec.handling),.4,1.3);
-    const braking=3.5*clamp(car.tune.brakeForce*traction,.4,1.4);
+    const lateral=3.4*clamp(traction*Math.sqrt(car.spec.handling),.4,1.3);
+    const braking=3.0*clamp(car.tune.brakeForce*traction,.4,1.4);
     let desired=clamp(Number(speedKmh)||90,30,180)/3.6;
     for(const zone of scene.limits||[]){
       if(zone.road!==road)continue;
@@ -165,11 +169,11 @@ export class Autopilot {
       const limit=Math.max(0,zone.limit-2)/3.6;
       desired=Math.min(desired,Math.sqrt(limit*limit+2*braking*Math.max(0,gap-15)));
     }
-    for(let ahead=0;ahead<=Math.max(90,car.speed*4);ahead+=14){
+    for(let ahead=0;ahead<=Math.max(100,car.speed*5);ahead+=8){
       const a=this.roads.at(road,distance+this.direction*ahead);
-      const b=this.roads.at(road,distance+this.direction*(ahead+18));
-      const curvature=Math.abs(Math.atan2(a.t.z*b.t.x-a.t.x*b.t.z,a.t.x*b.t.x+a.t.z*b.t.z))/18;
-      const crest=Math.max(0,a.t.y-b.t.y)/18;
+      const b=this.roads.at(road,distance+this.direction*(ahead+8));
+      const curvature=Math.abs(Math.atan2(a.t.z*b.t.x-a.t.x*b.t.z,a.t.x*b.t.x+a.t.z*b.t.z))/8;
+      const crest=Math.max(0,a.t.y-b.t.y)/8;
       const turnSpeed=Math.min(Math.sqrt(lateral/Math.max(.0001,curvature)),Math.sqrt(4.5/Math.max(.0001,crest)));
       desired=Math.min(desired,Math.sqrt(turnSpeed*turnSpeed+2*braking*Math.max(0,ahead-10)));
     }

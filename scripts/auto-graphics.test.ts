@@ -3,8 +3,27 @@ import assert from 'node:assert/strict';
 import {AutoGraphics,FramePacer,AUTO_GRAPHICS} from '../src/core/AutoGraphics';
 import {SaveManager} from '../src/core/SaveManager';
 import {SAVE_KEY} from '../src/core/SaveStorage';
+import {graphicsPresentation} from '../src/core/GraphicsPresentation';
+import {defaults} from '../src/core/SaveManager';
 
 function run(a:AutoGraphics,seconds:number,costs:number[],gpu=true){let elapsed=0,changes=0;while(elapsed<seconds){const cost=costs[a.level],frame=Math.max(1000/a.targetFps,cost);elapsed+=frame/1000;if(a.observe(frame,Math.min(cost,8),gpu?cost:null,true))changes++;}return changes;}
+test('startup begins at minimum and calibrates strong devices within nine seconds',()=>{
+ const a=new AutoGraphics();assert.equal(a.level,0);assert.deepEqual(a.distances,{renderDistance:10,simulationDistance:10});
+ run(a,9,[3,4,6,7,10]);assert.equal(a.level,4);assert.equal(a.targetFps,60);
+ a.restart();assert.equal(a.level,0);assert.equal(a.targetFps,60);
+});
+test('heavy startup and thermal overload reduce work within two seconds',()=>{
+ const a=new AutoGraphics();run(a,2,[42,55,70,90,120]);assert.equal(a.targetFps,30);
+ const b=new AutoGraphics();run(b,9,[3,4,6,7,10]);run(b,2,[24,42,55,80,120]);assert.ok(b.level<4);
+});
+test('menus always use minimum presentation; driving restores Auto or exact manual preferences without mutating the save',()=>{
+ for(const autoGraphics of [false,true]){
+  const settings={...defaults,autoGraphics,quality:'ultra' as const,renderDistance:2125,simulationDistance:725},before={...settings};
+  assert.deepEqual(graphicsPresentation(settings,4,false),{level:0,quality:'very-low',renderDistance:10,simulationDistance:10});
+  assert.deepEqual(graphicsPresentation(settings,4,true),autoGraphics?{level:4,quality:'ultra',renderDistance:3000,simulationDistance:1000}:{level:null,quality:'ultra',renderDistance:2125,simulationDistance:725});
+  assert.deepEqual(settings,before);
+ }
+});
 test('a strong device reaches Extra High at 60 FPS with maximum distances',()=>{
  const a=new AutoGraphics();run(a,100,[3,4,6,7,10]);assert.equal(a.level,4);assert.equal(a.targetFps,60);assert.equal(a.profile.label,'Extra High');assert.deepEqual(a.distances,{renderDistance:3000,simulationDistance:1000});
 });

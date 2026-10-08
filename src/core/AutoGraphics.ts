@@ -14,11 +14,12 @@ export const AUTO_GRAPHICS = [
  * Failed upgrades are held back for a minute instead of oscillating.
  */
 export class AutoGraphics {
-  level=1;
+  level=0;
   targetFps:30|60=60;
   private elapsed=0;
   private longStalls=0;
-  private settle=3;
+  private settle=.4;
+  private calibrating=true;
   private windowTime=0;
   private frameSum=0;
   private work=new Float32Array(240);
@@ -31,10 +32,10 @@ export class AutoGraphics {
   private targetUpgradeAt=0;
   get profile(){return AUTO_GRAPHICS[this.level];}
   get distances(){return GRAPHICS_PRESETS[this.profile.quality];}
-  restart(){this.level=1;this.targetFps=60;this.elapsed=0;this.longStalls=0;this.settle=3;this.upgradeAt=0;this.targetUpgradeAt=0;this.clear();}
+  restart(){this.level=0;this.targetFps=60;this.elapsed=0;this.longStalls=0;this.settle=.4;this.calibrating=true;this.upgradeAt=0;this.targetUpgradeAt=0;this.clear();}
   private clear(){this.windowTime=0;this.frameSum=0;this.count=0;this.slow=0;this.good=0;this.fast=0;}
-  suspend(){this.longStalls=0;this.clear();this.settle=Math.max(this.settle,2);}
-  private change(){this.clear();this.settle=2;return true;}
+  suspend(){this.longStalls=0;this.clear();this.settle=Math.max(this.settle,.35);}
+  private change(){this.clear();this.settle=.35;return true;}
   observe(frameMs:number,cpuMs:number,gpuMs:number|null,active:boolean){
     if(!active||!Number.isFinite(frameMs)||frameMs<=0){this.suspend();return false;}
     if(frameMs>500){
@@ -47,7 +48,7 @@ export class AutoGraphics {
     if(this.settle>0){this.settle-=seconds;return false;}
     this.windowTime+=seconds;this.frameSum+=frameMs;
     const i=this.count%240;this.frames[i]=frameMs;this.work[i]=Math.max(0,Number.isFinite(cpuMs)?cpuMs:0,gpuMs!==null&&Number.isFinite(gpuMs)?gpuMs:0);this.count++;
-    if(this.windowTime<2)return false;
+    if(this.windowTime<.75)return false;
     const n=Math.min(this.count,240),work=Array.from(this.work.subarray(0,n)).sort((a,b)=>a-b),frames=Array.from(this.frames.subarray(0,n)).sort((a,b)=>a-b);
     const average=this.frameSum/this.count,p90=frames[Math.floor((n-1)*.9)],cost=work[Math.floor((n-1)*.8)],budget=1000/this.targetFps,window=this.windowTime;
     this.windowTime=0;this.frameSum=0;this.count=0;
@@ -55,13 +56,14 @@ export class AutoGraphics {
     this.slow=overloaded?this.slow+window:0;
     this.good=!overloaded&&average<=budget*1.06&&cost<budget*.65?this.good+window:0;
     this.fast=this.targetFps===30&&!overloaded&&cost<11?this.fast+window:0;
-    if(this.slow>=4||average>budget*1.6){
-      if(this.level>0){this.level--;this.upgradeAt=this.elapsed+60;return this.change();}
+    if(this.slow>=1.5||average>budget*1.45||cost>budget*1.1){
+      this.calibrating=false;
+      if(this.level>0){this.level--;this.upgradeAt=this.elapsed+90;return this.change();}
       if(this.targetFps===60){this.targetFps=30;this.targetUpgradeAt=this.elapsed+90;return this.change();}
       this.slow=0;
     }
     if(this.fast>=20&&this.elapsed>=this.targetUpgradeAt){this.targetFps=60;return this.change();}
-    if(this.good>=16&&this.level<AUTO_GRAPHICS.length-1&&this.elapsed>=this.upgradeAt){this.level++;return this.change();}
+    if(this.good>=(this.calibrating?1.5:12)&&this.level<AUTO_GRAPHICS.length-1&&this.elapsed>=this.upgradeAt){this.level++;if(this.level===AUTO_GRAPHICS.length-1)this.calibrating=false;return this.change();}
     return false;
   }
 }

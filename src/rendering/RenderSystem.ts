@@ -53,6 +53,7 @@ export class RenderSystem {
     public canvas: HTMLCanvasElement,
     public settings: Settings,
     public uiCheck = false,
+    initialLevel:number|null=settings.autoGraphics?0:null,
   ) {
     this.scene.background = new T.Color("#b2c7d3");
     this.scene.fog = new T.FogExp2("#b2c7d3", 0.00023);
@@ -161,7 +162,7 @@ export class RenderSystem {
       this.fxaa = new ShaderPass(FXAAShader);
       this.composer.addPass(this.fxaa);
     }
-    if(settings.autoGraphics)this.automaticLevel=1;
+    this.automaticLevel=initialLevel;
     this.applyQuality();
     this.updateAtmosphere(0, new T.Vector3());
     this.resize();
