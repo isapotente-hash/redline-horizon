@@ -5,6 +5,7 @@ import { RoadNetwork, Road,roadHeight,surfaceBank } from "../world/RoadNetwork";
 import { PhysicsWorld, VehiclePhysics, R } from "../physics/VehiclePhysics";
 import { makeCar } from "./CarModel";
 import { clamp, damp, wrap } from "../core/math";
+import {trafficRange} from './TrafficRange';
 export type TrafficCar = {
   road:Road;
   root: T.Group;
@@ -13,6 +14,7 @@ export type TrafficCar = {
   body: ReturnType<PhysicsWorld["world"]["createRigidBody"]>;
   collider: ReturnType<PhysicsWorld['world']['createCollider']>;
   crashTime:number;
+  spawnRetry?:number;
   halfWidth:number;
   bodyHeight:number;
   turn?:{curve:T.CubicBezierCurve3;length:number;travel:number;road:Road;d:number;direction:number;lane:number};
@@ -99,6 +101,7 @@ export class TrafficManager {
         R.ColliderDesc.cuboid(chassis.halfBody[0]+.05,isBike(spec)?.5:spec.kit==="pickup"?.8:.5,chassis.halfBody[2]+.15).setMass(chassis.mass).setFriction(0.6).setRestitution(.15),
         body,
       );
+      body.setEnabled(false);root.visible=false;
       this.root.add(root);
       this.cars.push({
         road:this.roads.main,
@@ -117,7 +120,6 @@ export class TrafficManager {
         brake,
         paint,
       });
-      this.recover(this.cars[this.cars.length-1]);
     }
   }
   collisions(player:VehiclePhysics) {
@@ -135,13 +137,14 @@ export class TrafficManager {
   recover(c:TrafficCar) {
     c.crashTime=0;c.turn=undefined;c.speed=0;c.body.setBodyType(R.RigidBodyType.KinematicPositionBased,true);
     this.pose(c,0);c.body.setTranslation(this.p,true);c.body.setRotation(c.root.quaternion,true);
+    c.body.setEnabled(true);c.root.visible=true;
   }
-  crashStep(c:TrafficCar,dt:number,player:T.Vector3) {
+  crashStep(c:TrafficCar,dt:number,player:T.Vector3,allowRecovery=true) {
     if(c.crashTime<=0)return false;
     c.crashTime=Math.max(.001,c.crashTime-dt);
     const p=c.body.translation(),q=c.body.rotation();c.root.quaternion.set(q.x,q.y,q.z,q.w);this.up.set(0,c.bodyHeight,0).applyQuaternion(c.root.quaternion);c.root.position.set(p.x,p.y,p.z).sub(this.up);c.brake.emissiveIntensity=4;
-    // Never snap a wreck back through the player. Resume only after it is well clear.
-    if(c.crashTime<=.001&&c.root.position.distanceTo(player)>35)this.recover(c);
+    // Race opponents retain their existing recovery. Streamed traffic recycles out of sight.
+    if(allowRecovery&&c.crashTime<=.001&&c.root.position.distanceTo(player)>35)this.recover(c);
     return true;
   }
   pose(c: TrafficCar, dt: number) {
@@ -177,32 +180,55 @@ export class TrafficManager {
     const curve=new T.CubicBezierCurve3(start,start.clone().addScaledVector(a.t,c.direction*reach),finish.clone().addScaledVector(b.t,-best.direction*reach),finish);
     c.turn={curve,length:curve.getLength(),travel:0,road:best.road,d:best.d,direction:best.direction,lane};
   }
-  update(dt: number, player: T.Vector3, _quality: string, simulationDistance=1200, renderDistance=1600, view=player) {
+  private spawn(c:TrafficCar,index:number,player:T.Vector3,view:T.Vector3,range:ReturnType<typeof trafficRange>,nearest:ReturnType<RoadNetwork['nearest']>) {
+    // Try valid road positions; never clamp an out-of-range candidate onto a nearby road end.
+    for(const road of [nearest.road,...this.roads.roads.filter(r=>r!==nearest.road)]) {
+      const hit=road===nearest.road?nearest:this.roads.nearest(player.x,player.z,false,road);
+      if(!Number.isFinite(hit.distance)||hit.distance>range.retain)continue;
+      for(let attempt=0;attempt<8;attempt++) {
+        const side=(index+attempt)%2?1:-1;
+        const distance=range.spawn+((index*37+attempt*43)%120);
+        const d=hit.sample.d+side*distance;
+        if(!road.closed&&(d<35||d>road.length-35))continue;
+        const candidate=road.closed?wrap(d,road.length):d;
+        const direction=index%4===0?-1:1;
+        const lane=direction*(road.width>14?(index%2?5.5:2):road.width*.25);
+        const a=this.roads.at(road,candidate),position=a.p.clone().addScaledVector(a.r,lane);
+        const separation=position.distanceTo(player);
+        if(separation<range.spawn||separation>range.retain-15||position.distanceTo(view)<range.spawn)continue;
+        if(this.cars.some(other=>other!==c&&other.body.isEnabled()&&other.root.position.distanceToSquared(position)<32*32))continue;
+        c.road=road;c.d=candidate;c.direction=direction;c.lane=lane;c.turn=undefined;c.crashTime=0;c.speed=c.target;
+        c.body.setBodyType(R.RigidBodyType.KinematicPositionBased,true);
+        this.pose(c,0);c.body.setTranslation(this.p,true);c.body.setRotation(c.root.quaternion,true);
+        c.body.setEnabled(true);return true;
+      }
+    }
+    return false;
+  }
+  update(dt: number, player: T.Vector3, _quality: string, simulationDistance=1200, renderDistance=1600, view=player, playerSpeed=0) {
+    const range=trafficRange(playerSpeed,simulationDistance,renderDistance);
     const count = this.active
         ? this.cars.length
         : 0,
       nearest = this.roads.nearest(player.x, player.z);
     for (let i = 0; i < this.cars.length; i++) {
       const c = this.cars[i];
-      c.root.visible = i < count && c.root.position.distanceTo(view)<renderDistance;
-      c.detail.visible = c.bike || c.root.position.distanceTo(view) < 160;
-      c.low.visible = !c.detail.visible;
-      c.body.setEnabled(i<count);
       if (i >= count) {
-        c.body.setNextKinematicTranslation({ x: 0, y: -1000 - i * 3, z: 0 });
+        c.root.visible=false;c.body.setEnabled(false);
         continue;
       }
-      if(this.crashStep(c,dt,player))continue;
-      if (c.root.position.distanceTo(player) > simulationDistance) {
-        c.road=nearest.road;c.turn=undefined;c.direction=i%4===0?-1:1;c.lane=c.direction*(c.road.width>14?(i%2?5.5:2):c.road.width*.25);
-        const spawn=nearest.sample.d+c.direction*(simulationDistance*(.65+i/Math.max(1,count)*.2));
-        c.d=c.road.closed?wrap(spawn,c.road.length):clamp(spawn,35,c.road.length-35);
-        if(this.roads.at(c.road,c.d).p.distanceTo(player)<150){c.root.visible=false;c.body.setEnabled(false);continue;}
-        c.speed = c.target;
-        this.pose(c,0);c.body.setTranslation(this.p,true);c.body.setRotation(c.root.quaternion,true);
+      if(c.body.isEnabled()&&this.crashStep(c,dt,player,false)) {
+        c.root.visible=c.root.position.distanceTo(view)<range.visible;
+        if(c.root.position.distanceTo(player)<=range.retain||c.root.position.distanceTo(view)<=range.visible+80)continue;
       }
-      if(c.root.position.distanceTo(player)>simulationDistance){c.body.setEnabled(false);continue;}
-      c.root.visible=c.root.position.distanceTo(view)<renderDistance;
+      // The unload buffer prevents toggling at a distance boundary or after Auto changes tier.
+      // Never recycle a car that either the driver or the free camera can still see.
+      if(!c.body.isEnabled()||(c.root.position.distanceTo(player)>range.retain&&c.root.position.distanceTo(view)>range.visible+80)) {
+        c.root.visible=false;c.body.setEnabled(false);
+        c.spawnRetry=Math.max(0,(c.spawnRetry||0)-dt);
+        if(c.spawnRetry>0)continue;
+        if(!this.spawn(c,i,player,view,range,nearest)){c.spawnRetry=.5+i*.02;continue;}
+      }
       const a = this.roads.at(c.road, c.d),
         ahead = this.roads.at(c.road, c.d + c.direction * 50),
         angle = a.t.angleTo(ahead.t);
@@ -220,7 +246,7 @@ export class TrafficManager {
       if (along > 0 && along < 65 && side < 2.1)
         desired = Math.min(desired, Math.max(0, (along - 8) * 0.7));
       for (let j = 0; j < count; j++) {
-        if (i === j) continue;
+        if (i === j || !this.cars[j].body.isEnabled()) continue;
         const other = this.cars[j],
           gap = c.road.closed?wrap((other.d - c.d)*c.direction,c.road.length):(other.d-c.d)*c.direction;
         if (other.road===c.road && other.direction===c.direction && Math.abs(other.lane-c.lane)<1 && gap>0 && gap < 50)
@@ -233,6 +259,11 @@ export class TrafficManager {
       if(c.turn){c.turn.travel+=c.speed*dt;if(c.turn.travel>=c.turn.length){const turn=c.turn;c.road=turn.road;c.d=turn.d;c.direction=turn.direction;c.lane=turn.lane;c.turn=undefined;}}
       else {const next=c.d+c.speed*c.direction*dt;c.d=c.road.closed?wrap(next,c.road.length):clamp(next,0,c.road.length);}
       this.pose(c, dt);
+      const distance=c.root.position.distanceTo(view);
+      c.root.visible=distance<(c.root.visible?range.visible+60:range.visible);
+      const detailDistance=c.root.position.distanceTo(view);
+      c.detail.visible=c.bike||detailDistance<(c.detail.visible?180:150);
+      c.low.visible=!c.detail.visible;
     }
   }
 }

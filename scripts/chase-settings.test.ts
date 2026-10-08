@@ -38,7 +38,7 @@ test('render focus can leave the car without moving simulation; both distance sl
 test('off-screen traffic still ticks and collides, with no distant-body teleport impulse',async()=>{
  const physics=await new PhysicsWorld().init(),roads=new RoadNetwork(),traffic=new TrafficManager(roads,physics,2),p=roads.at(roads.main,200).p,c=traffic.cars[0];c.d=220;c.lane=-3;c.speed=12;traffic.recover(c);const before=c.d;
  traffic.update(1/120,p,'low',250,500,p.clone().add(new T.Vector3(4000,0,0)));assert.equal(c.root.visible,false);assert.equal(c.body.isEnabled(),true);assert.notEqual(c.d,before);
- c.d=4000;traffic.recover(c);traffic.update(1/120,p,'low',250,500,p);physics.world.step();assert.ok(c.body.isEnabled());assert.ok(c.root.position.distanceTo(p)<250);assert.ok(Math.hypot(c.body.linvel().x,c.body.linvel().z)<100);
+ c.d=4000;traffic.recover(c);traffic.update(1/120,p,'low',250,500,p);physics.world.step();assert.ok(c.body.isEnabled());assert.ok(c.root.position.distanceTo(p)>600&&c.root.position.distanceTo(p)<740);assert.ok(Math.hypot(c.body.linvel().x,c.body.linvel().z)<100);
  physics.world.free();
 });
 test('pursuit cars gain acceleration and brake/steer for a blocked lane',async()=>{

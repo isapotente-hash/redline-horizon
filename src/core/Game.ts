@@ -763,6 +763,16 @@ export class Game {
       this.physicsClock.begin(elapsedFrame, performance.now());
       while (this.physicsClock.take(performance.now())) {
         const stepStart=performance.now();
+        this.traffic.update(
+          step,
+          this.vehicle.position,
+          this.worldSettings.quality,
+          this.worldSettings.simulationDistance,
+          this.worldSettings.renderDistance,
+          this.camera.mode===6?this.camera.freePosition:this.vehicle.position,
+          this.vehicle.speed,
+        );
+        navigation.cars=this.race.networkRace?[]:this.race.active?this.race.ai.cars:this.traffic.active?this.traffic.cars.filter(c=>c.body.isEnabled()):[];
         this.police.preStep(step,this.vehicle,this.race.active||this.race.finished||!!this.practice,this.traffic.active?navigation.cars:[]);
         if(this.rollingLaunch&&this.race.networkRace&&this.race.countdown<=0){this.rollingLaunch=false;this.vehicle.body.setLinvel({x:this.vehicle.forward.x*15,y:this.vehicle.forward.y*15,z:this.vehicle.forward.z*15},true);}
         const input =
@@ -773,14 +783,6 @@ export class Game {
         this.slipstream.update(step,this.vehicle,input,this.race.networkRace?noTraffic:this.race.active?this.race.ai.cars:this.traffic.active?this.traffic.cars:noTraffic,this.remotes,now);
         if(this.race.active&&this.race.countdown<=0&&this.autopilot.enabled)this.race.assistUsed=true;
         this.vehicle.preStep(input, step);
-        this.traffic.update(
-          step,
-          this.vehicle.position,
-          this.worldSettings.quality,
-          this.worldSettings.simulationDistance,
-          this.worldSettings.renderDistance,
-          this.camera.mode===6?this.camera.freePosition:this.vehicle.position,
-        );
         this.race.update(step, this.vehicle);
         if(this.race.lapSerial!==this.recordedLapSerial){
           this.recordedLapSerial=this.race.lapSerial;

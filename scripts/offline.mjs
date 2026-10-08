@@ -1,10 +1,16 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, readdir } from "node:fs/promises";
 import path from "node:path";
 const root = path.resolve("dist");
 let html = await readFile(path.join(root, "index.html"), "utf8");
 const js = html.match(/<script\b[^>]*src="([^"]+)"[^>]*><\/script>/);
 if (!js) throw Error("Built module script not found");
-const code = await readFile(path.join(root, js[1]), "utf8");
+let code = await readFile(path.join(root, js[1]), "utf8");
+// Worker modules must also travel with the single downloadable HTML.
+for(const file of await readdir(path.join(root,'assets')))if(/^SoundtrackWorker-.*\.js$/.test(file)){
+  const worker=await readFile(path.join(root,'assets',file),'utf8');
+  code=code.replaceAll(`new URL(${JSON.stringify(file)},import.meta.url)`,
+    `new URL(URL.createObjectURL(new Blob([${JSON.stringify(worker)}],{type:"text/javascript"})),import.meta.url)`);
+}
 html = html.replace(
   js[0],
   () =>
