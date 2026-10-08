@@ -1264,6 +1264,18 @@ label output {
   .mobile-device .drive-ui [data-hold="KeyA"] {grid-column:1}
   .mobile-device .drive-ui [data-hold="KeyD"] {grid-column:2}
   .mobile-device .drive-ui [data-hold="Space"] {grid-column:4}
+  .mobile-device .drive-ui #touch-drift {
+    color:#ffe2a0;
+    background:#382616ed;
+    border-color:#e4a744;
+    font-weight:800;
+    touch-action:none;
+  }
+  .mobile-device .drive-ui #touch-drift:active {
+    color:#1c1710;
+    background:#ffd377;
+    border-color:#ffd377;
+  }
   .mobile-device .drive-ui [data-hold="KeyS"] {grid-column:5}
   .mobile-device .drive-ui [data-hold="KeyW"] {grid-column:6;background:#bb233bcc}
   .mobile-device .drive-ui #touch-wheelie {
