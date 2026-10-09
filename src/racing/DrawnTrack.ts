@@ -28,23 +28,42 @@ export function validDrawnTrack(v:unknown):v is DrawnTrack{
     t.points.every((p,i)=>distance(p,t.points[(i+1)%t.points.length])>=.004)&&
     t.points.reduce((length,p,i)=>length+distance(p,t.points[(i+1)%t.points.length]),0)>=.25&&simpleLoop(t.points);
 }
-/** Douglas–Peucker keeps the line's bends while removing finger jitter. */
+/** Iterative Douglas–Peucker avoids stack overflow on long touch strokes. */
 function simplify(points:TrackPoint[],epsilon:number):TrackPoint[]{
   if(points.length<3)return points;
-  const a=points[0],b=points.at(-1)!,dx=b[0]-a[0],dy=b[1]-a[1],length2=dx*dx+dy*dy;
-  let best=epsilon,index=-1;
-  for(let i=1;i<points.length-1;i++){
-    const p=points[i],t=length2?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/length2)):0;
-    const gap=Math.hypot(p[0]-a[0]-dx*t,p[1]-a[1]-dy*t);if(gap>best){best=gap;index=i;}
+  const keep=new Set([0,points.length-1]),pending:[number,number][]=[[0,points.length-1]];
+  while(pending.length){
+    const [start,end]=pending.pop()!,a=points[start],b=points[end],dx=b[0]-a[0],dy=b[1]-a[1],length2=dx*dx+dy*dy;
+    let best=epsilon,index=-1;
+    for(let i=start+1;i<end;i++){
+      const p=points[i],t=length2?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/length2)):0;
+      const gap=Math.hypot(p[0]-a[0]-dx*t,p[1]-a[1]-dy*t);if(gap>best){best=gap;index=i;}
+    }
+    if(index>=0){keep.add(index);pending.push([start,index],[index,end]);}
   }
-  return index<0?[a,b]:[...simplify(points.slice(0,index+1),epsilon).slice(0,-1),...simplify(points.slice(index),epsilon)];
+  return [...keep].sort((a,b)=>a-b).map(i=>points[i]);
+}
+/** Snap a small finishing overrun to the start without hiding crossings elsewhere. */
+function closeStroke(raw:TrackPoint[]):TrackPoint[]{
+  const travelled=[0];for(let i=1;i<raw.length;i++)travelled.push(travelled[i-1]+distance(raw[i-1],raw[i]));
+  const total=travelled.at(-1)!;let nearest=.025,closure=-1;
+  for(let i=4;i<raw.length;i++){
+    const gap=distance(raw[0],raw[i]);
+    if(travelled[i]>=.25&&total-travelled[i]<=Math.min(.12,total*.15)&&gap<nearest){nearest=gap;closure=i;}
+  }
+  return closure<0?raw:raw.slice(0,closure);
 }
 export function makeDrawnTrack(raw:TrackPoint[],name='My circuit',width=14):DrawnTrack{
   if(raw.length<4||raw.length>4096)throw new Error('Draw a complete loop with at least four points.');
-  let points=simplify(raw,.0035).map(p=>p.map(n=>Math.round(n*10000)/10000) as TrackPoint);
-  if(points.length>4&&distance(points[0],points.at(-1)!)<.012)points.pop();
-  points=points.filter((p,i)=>i===0||distance(p,points[i-1])>=.004);
-  const track:DrawnTrack={version:1,name:name.replace(/[<>\x00-\x1f]/g,'').trim().slice(0,32)||'My circuit',width,points};
+  if(!raw.every(p=>Array.isArray(p)&&p.length===2&&p.every(n=>Number.isFinite(n)&&n>=.02&&n<=.98)))throw new Error('Keep the track inside the drawing area.');
+  const track:DrawnTrack={version:1,name:name.replace(/[<>\x00-\x1f]/g,'').trim().slice(0,32)||'My circuit',width,points:raw.map(p=>[...p])};
+  // Saved/network control points are already normalized. Do not reshape them on play.
+  if(!validDrawnTrack(track as unknown)){
+    const rounded=simplify(closeStroke(raw),.0035).map(p=>p.map(n=>Math.round(n*10000)/10000) as TrackPoint),points:TrackPoint[]=[];
+    for(const p of rounded)if(!points.length||distance(p,points.at(-1)!)>=.004)points.push(p);
+    while(points.length>4&&distance(points[0],points.at(-1)!)<.025)points.pop();
+    track.points=points;
+  }
   if(!validDrawnTrack(track))throw new Error('Draw a longer, wider loop without crossing your line. Keep the bends spaced apart.');
   buildDrawnRoad(track); // Also check the smoothed driving surface.
   return track;
