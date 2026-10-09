@@ -27,6 +27,8 @@ type Chunk = {
   z: number;
   treeBatches: {foliage:T.InstancedMesh;wood:T.InstancedMesh;variant:number;nearFoliage:T.InstancedMesh;nearWood:T.InstancedMesh;transforms:T.Matrix4[];colors:T.Color[]}[];
   treeLod:number;
+  treeMembership?:Uint8Array;
+  treeNextMembership?:Uint8Array;
   grass:T.InstancedMesh;
   obstacles:SceneryObstacle[];
   obstacleColliders:Map<SceneryObstacle,ReturnType<typeof sceneryCollider>>;
@@ -144,6 +146,20 @@ export class World {
     parent.add(o);
     return o;
   }
+  /** Merge adjacent ribbons with the same material, retaining sector culling.
+   * No extra scenery/triangles: fewer draw submissions for the same road. */
+  private batchRoadSector(sector:T.Group){
+    const batches=new Map<T.Material,T.Mesh[]>();
+    for(const child of sector.children)if(child instanceof T.Mesh&&!(child instanceof T.InstancedMesh)&&!Array.isArray(child.material)){
+      const meshes=batches.get(child.material)??[];meshes.push(child);batches.set(child.material,meshes);
+    }
+    for(const [material,meshes] of batches){
+      if(meshes.length<2)continue;
+      const geometry=mergeGeometries(meshes.map(m=>m.geometry),false);if(!geometry)continue;
+      const mesh=new T.Mesh(geometry,material);mesh.receiveShadow=true;mesh.name='Batched road surface';sector.add(mesh);
+      for(const old of meshes){sector.remove(old);old.geometry.dispose();}
+    }
+  }
   *buildRoads() {
     const concrete = new T.MeshStandardMaterial({
         color: "#8f8b80",
@@ -233,7 +249,7 @@ export class World {
         grass.computeBoundingSphere();sector.add(grass);this.grassSectors.push(grass);
         const center=road.samples[Math.floor((i+end)/2)].p.clone();
         this.roadSectors.push({group:sector,center,radius:road.samples[end].d-road.samples[i].d});
-        this.roadsGroup=oldGroup;yield;
+        this.batchRoadSector(sector);this.roadsGroup=oldGroup;yield;
       }
       // Continuous grade-following dry stone walls; junctions and tunnel portals stay open.
       if(road===this.network.main||["SILVER CANYON","SUMMIT PASS","SUNSET EXPRESSWAY","SOUTH COAST","BRACKEN LANE","HIGHLAND SWITCHBACKS"].includes(road.name)){
@@ -330,7 +346,7 @@ export class World {
     if(!force&&!changed&&now-this.lastUpdate<100)return;
     this.lastUpdate=now;this.updateSettings=settingsKey;
     this.dryGrass.update(this.settings);
-    const updateLod=force||changed||this.lastLod.distanceToSquared(p)>64;
+    const updateLod=force||changed||this.lastLod.distanceToSquared(view)>64;
     const cx = Math.floor(p.x / 256),
       cz = Math.floor(p.z / 256),
       radius = this.residentRadius,
@@ -350,14 +366,23 @@ export class World {
       const d = Math.hypot(c.x - cx, c.z - cz);
       if(updateLod){
         const nearDistance=140;
+        const membership=c.treeNextMembership??=new Uint8Array(c.treeBatches.reduce((n,b)=>n+b.transforms.length,0));let membershipIndex=0,membershipChanged=!c.treeMembership;
+        for(const batch of c.treeBatches)for(const m of batch.transforms){const e=m.elements;
+          // Hysteresis keeps trees stable as the player crosses the LOD boundary.
+          const limit=c.treeMembership?.[membershipIndex]?nearDistance+14:nearDistance-14;
+          const near=(e[12]-view.x)**2+(e[14]-view.z)**2<limit**2?1:0;
+          membership[membershipIndex]=near;if(c.treeMembership?.[membershipIndex]!==near)membershipChanged=true;membershipIndex++;
+        }
+        if(membershipChanged){membershipIndex=0;
         for(const batch of c.treeBatches){let near=0,far=0;
-          for(let i=0;i<batch.transforms.length;i++){const m=batch.transforms[i],e=m.elements,isNear=(e[12]-p.x)**2+(e[14]-p.z)**2<nearDistance**2,index=isNear?near++:far++;
+          for(let i=0;i<batch.transforms.length;i++){const m=batch.transforms[i],isNear=membership[membershipIndex++]===1,index=isNear?near++:far++;
             const foliage=isNear?batch.nearFoliage:batch.foliage,wood=isNear?batch.nearWood:batch.wood;
             foliage.setMatrixAt(index,m);wood.setMatrixAt(index,m);foliage.setColorAt(index,batch.colors[i]);
           }
           batch.nearFoliage.count=batch.nearWood.count=near;batch.foliage.count=batch.wood.count=far;
           for(const mesh of [batch.foliage,batch.wood,batch.nearFoliage,batch.nearWood]){mesh.visible=mesh.count>0;mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;mesh.boundingSphere=null;}
         }
+        c.treeNextMembership=c.treeMembership;c.treeMembership=membership;}
       }
       c.grass.visible=this.dryGrass.visible(c.grass,view);
       c.group.visible=Math.hypot(c.x-vx,c.z-vz)<=this.visualRadius+.7;
@@ -385,7 +410,7 @@ export class World {
         this.chunks.delete(key);
       }
     }
-    if(updateLod)this.lastLod.copy(p);
+    if(updateLod)this.lastLod.copy(view);
     this.lodTick++;
     if(needed.length===0)this.buildFarTerrain(view);
     const range=this.settings.renderDistance;
@@ -397,7 +422,7 @@ export class World {
       this.wet = wet;
       this.asphalt.roughness = lerp(0.94, 0.28, wet);
       this.asphalt.clearcoat = wet * 0.85;
-      this.asphalt.color.set(wet ? "#979995" : "#c1beb7");
+      this.asphalt.color.set(wet ? "#929b9e" : "#d1d0cc");
       this.roadsGroup.traverse(o=>{if(o instanceof T.Mesh&&o.material instanceof T.MeshPhysicalMaterial){o.material.roughness=this.asphalt.roughness;o.material.clearcoat=this.asphalt.clearcoat;o.material.color.copy(this.asphalt.color)}});
     }
   }

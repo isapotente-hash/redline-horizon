@@ -10,24 +10,29 @@ function texture(pixels:Uint8Array,width:number,height:number,color=false){
 export function asphaltMaterial(){
   const size=512,pixels=new Uint8Array(size*size*4),relief=new Uint8Array(pixels.length),random=rng(344);
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
-    const i=(y*size+x)*4,fine=random(),aggregate=random(),patch=Math.sin(x*.061+Math.sin(y*.035))*3;
-    const value=Math.round(98+(fine-.5)*26+(aggregate>.92?19:aggregate<.07?-18:0)+patch);
-    pixels[i]=value;pixels[i+1]=value;pixels[i+2]=value-1;pixels[i+3]=255;
-    const h=Math.round(125+fine*75);relief[i]=relief[i+1]=relief[i+2]=h;relief[i+3]=255;
+    const i=(y*size+x)*4,fine=random(),aggregate=random(),u=x/size*Math.PI*2,v=y/size*Math.PI*2;
+    const patch=Math.sin(u*3+Math.sin(v*2))*5+Math.sin(v*7+u)*2;
+    const grain=aggregate>.94?23:aggregate<.08?-15:0;
+    const value=Math.round(91+(fine-.5)*22+grain+patch);
+    pixels[i]=value;pixels[i+1]=value+1;pixels[i+2]=value+2;pixels[i+3]=255;
+    // Red is relief; green is roughness. Both maps share one GPU allocation.
+    relief[i]=Math.round(105+fine*70+grain);relief[i+1]=Math.round(228+patch+fine*15);relief[i+2]=0;relief[i+3]=255;
   }
   const albedo=texture(pixels,size,size,true),height=texture(relief,size,size);
-  return new T.MeshPhysicalMaterial({name:'weathered-grey-asphalt',color:'#c1beb7',map:albedo,bumpMap:height,bumpScale:.012,roughness:.94,metalness:0,clearcoat:0});
+  return new T.MeshPhysicalMaterial({name:'weathered-grey-asphalt',color:'#d1d0cc',map:albedo,bumpMap:height,bumpScale:.018,roughnessMap:height,roughness:.94,metalness:0,clearcoat:0});
 }
 export function dryFieldTexture(){
   const size=512,p=new Uint8Array(size*size*4),random=rng(719);
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const i=(y*size+x)*4,v=Math.round(128+random()*60+Math.sin(x*.041+Math.sin(y*.067))*12);
-    p[i]=p[i+1]=p[i+2]=v;p[i+3]=255;
+    const u=x/size*Math.PI*2,w=y/size*Math.PI*2;
+    p[i]=v;p[i+1]=Math.round(145+Math.sin(u*2+Math.sin(w*3))*45+Math.sin(w*5+u)*18);
+    p[i+2]=Math.round(140+Math.sin(u*5-w*3)*40);p[i+3]=255;
   }
   // Short, irregular straw fragments rather than a flat noisy wash.
   for(let j=0;j<22000;j++){
     const x=Math.floor(random()*size),y=Math.floor(random()*size),length=5+Math.floor(random()*14),bend=random()*1.4-.7,v=60+Math.floor(random()*175);
-    for(let k=0;k<length;k++)for(let w=0;w<2;w++){const px=(x+Math.round(k*bend)+w+size)%size,py=(y+k)%size,i=(py*size+px)*4;p[i]=p[i+1]=p[i+2]=v;}
+    for(let k=0;k<length;k++)for(let w=0;w<2;w++){const px=(x+Math.round(k*bend)+w+size)%size,py=(y+k)%size,i=(py*size+px)*4;p[i]=v;}
   }
   return texture(p,size,size);
 }

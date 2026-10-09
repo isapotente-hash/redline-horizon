@@ -2,7 +2,7 @@ import * as T from 'three';
 
 /** World-space detail stays continuous across terrain chunk boundaries. */
 export function surfaceDetail<M extends T.MeshStandardMaterial>(material:M, kind:'ground'|'rock'|'bark',field?:T.Texture):M {
-  material.customProgramCacheKey=()=>`coastal-detail-v2-${kind}-${!!field}`;
+  material.customProgramCacheKey=()=>`coastal-detail-v3-${kind}-${!!field}`;
   material.onBeforeCompile=shader=>{
     if(field)shader.uniforms.detailFieldMap={value:field};
     shader.vertexShader=shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vDetailWorld;\nvarying vec3 vDetailLocal;');
@@ -20,9 +20,10 @@ export function surfaceDetail<M extends T.MeshStandardMaterial>(material:M, kind
       float detailHash(vec2 p){vec3 q=fract(vec3(p.xyx)*.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
       float detailNoise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(detailHash(i),detailHash(i+vec2(1,0)),f.x),mix(detailHash(i+vec2(0,1)),detailHash(i+vec2(1,1)),f.x),f.y);}`);
     const detail=kind==='ground'&&field ? `
-      vec3 straw=texture2D(detailFieldMap,vDetailWorld.xz*.32).rgb;
-      float fieldPatch=detailNoise(vDetailWorld.xz*.19);
-      diffuseColor.rgb*=(.38+straw*.72)*(.69+fieldPatch*.49);`
+      float straw=texture2D(detailFieldMap,vDetailWorld.xz*.32).r;
+      vec2 fieldVariation=texture2D(detailFieldMap,vDetailWorld.xz*.012).gb;
+      diffuseColor.rgb*=(.48+straw*.65)*(.68+fieldVariation.x*.55);
+      diffuseColor.rgb=mix(diffuseColor.rgb,diffuseColor.rgb*vec3(.86,.83,.72),smoothstep(.58,.78,fieldVariation.y)*.35);`
       :kind==='ground' ? `
       float soil=detailNoise(vDetailWorld.xz*.7);
       float grain=detailNoise(vDetailWorld.xz*7.);

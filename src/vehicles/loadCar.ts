@@ -21,11 +21,14 @@ export async function loadCar(): Promise<CarVisual> {
     alloy = mats.get("alloy") as T.MeshStandardMaterial,
     brake = mats.get("brake_led") as T.MeshStandardMaterial,
     head = mats.get("head_led") as T.MeshStandardMaterial;
-  paint.roughness = .19;
+  paint.metalness = .55;
+  paint.roughness = .18;
   paint.clearcoat = 1;
-  paint.clearcoatRoughness = .055;
+  paint.clearcoatRoughness = .07;
   paint.envMapIntensity = 1.15;
   alloy.roughness = .24;
+  glass.color.set('#24313b');
+  glass.metalness=.05;glass.roughness=.09;glass.envMapIntensity=1.05;
   // Share each tunable material across glass panels and independently exported parts.
   root.traverse((o) => {
     if (o instanceof T.Mesh && !Array.isArray(o.material)) {

@@ -1,5 +1,6 @@
 import {AUTO_GRAPHICS} from "../core/AutoGraphics";
 import {GpuTimer} from "./GpuTimer";
+import {reflectionPanorama} from './BakedAtmosphere';
 import * as T from "three";
 import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
 import { cloudLayer } from "./CloudLayer";
@@ -25,7 +26,7 @@ export class RenderSystem {
   grade?: ShaderPass;
   sky = new Sky();
   sun = new T.DirectionalLight("#ffe2c1", 3.2);
-  hemi = new T.HemisphereLight("#b9d5e5", "#676045", 1.75);
+  hemi = new T.HemisphereLight("#bed7ee", "#776746", 1.35);
   sunDirection = new T.Vector3();
   water: T.Mesh;
   studio = new T.Group();
@@ -49,6 +50,7 @@ export class RenderSystem {
   // Compatibility hook: image buffers and effects never change with frame timing.
   adaptResolution(_dt:number,_driving:boolean){}
   env?: T.WebGLRenderTarget;
+  private environmentKey='';
   constructor(
     public canvas: HTMLCanvasElement,
     public settings: Settings,
@@ -73,7 +75,7 @@ export class RenderSystem {
     this.sun.shadow.radius = 2;
     const u = this.sky.material.uniforms;
     u.turbidity.value = 3;
-    u.rayleigh.value = 2.1;
+    u.rayleigh.value = 1.45;
     u.mieCoefficient.value = 0.0035;
     u.mieDirectionalG.value = 0.82;
     const waterMaterial = new T.ShaderMaterial({
@@ -153,7 +155,8 @@ export class RenderSystem {
           vec3 e=texture2D(tDiffuse,vUv+vec2(texel.x,0.)).rgb,w=texture2D(tDiffuse,vUv-vec2(texel.x,0.)).rgb;
           vec3 lo=min(c.rgb,min(min(n,s),min(e,w))),hi=max(c.rgb,max(max(n,s),max(e,w)));
           c.rgb=clamp(c.rgb+(c.rgb-(n+s+e+w)*.25)*sharpness,lo,hi);
-          float l=dot(c.rgb,vec3(.2126,.7152,.0722));c.rgb=mix(vec3(l),c.rgb,1.055);
+          float l=dot(c.rgb,vec3(.2126,.7152,.0722));c.rgb=mix(vec3(l),c.rgb,1.06);
+          c.rgb=max(vec3(0.),c.rgb-vec3(.008,.006,.003));
           vec2 p=vUv-.5;c.rgb*=1.-dot(p,p)*.12;gl_FragColor=vec4(max(c.rgb,vec3(0.)),c.a);
         }`
       });
@@ -221,12 +224,12 @@ export class RenderSystem {
     this.sky.material.uniforms.sunPosition.value.copy(this.sunDirection);
     this.sky.visible = this.night < 0.98;
     this.sky.material.uniforms.turbidity.value =
-      this.settings.weather === "clear" ? 3 : 10;
+      this.settings.weather === "clear" ? 2.5 : 10;
     const cloudy = this.settings.weather === "clear" ? 1 : 0.43;
     this.sun.intensity = Math.max(0, e * 1.4) * 3.2 * cloudy;
     this.sun.color.set(e < 0.35 ? "#ffc48e" : "#fff1dc");
     this.hemi.intensity =
-      lerp(1.75, 0.16, this.night) *
+      lerp(1.35, 0.16, this.night) *
       (this.settings.weather === "fog" ? 0.7 : 1);
     const texel=190/this.sun.shadow.mapSize.x;
     this.sun.target.position.set(Math.round(p.x/texel)*texel,p.y,Math.round(p.z/texel)*texel);
@@ -235,7 +238,7 @@ export class RenderSystem {
     const clouds=this.clouds.material.uniforms;
     clouds.time.value=t;clouds.night.value=this.night;clouds.sunHeight.value=e;
     clouds.coverage.value=this.settings.weather==="clear"?.54:.36;
-    this.scene.environmentIntensity=lerp(.78,.1,this.night);
+    this.scene.environmentIntensity=lerp(.72,.035,this.night);
     const fog = this.scene.fog as T.FogExp2;
     fog.density = {
       clear: 0.0001,
@@ -247,7 +250,7 @@ export class RenderSystem {
       this.night > 0.7
         ? "#111b2b"
         : this.settings.weather === "clear"
-          ? "#b2c7d3"
+          ? "#c4d4df"
           : "#9baab2",
     );
     (this.scene.background as T.Color).copy(fog.color);
@@ -259,16 +262,21 @@ export class RenderSystem {
   }
   environment() {
     if (!this.renderer) return;
-    const scene = new T.Scene();
-    scene.add(this.sky.clone());
+    const hour=this.settings.hour>=7&&this.settings.hour<18?Math.floor(this.settings.hour)+.5:15;
+    const source=reflectionPanorama(hour,this.settings.weather);
+    const next=this.pmrem!.fromEquirectangular(source);source.dispose();
     this.env?.dispose();
-    this.env = this.pmrem!.fromScene(scene, 0.03, 0.1, 15000);
+    this.env = next;
+    this.environmentKey=`${Math.floor(this.settings.hour)}:${this.settings.weather}`;
     this.scene.environment = this.env.texture;
-    this.scene.environmentIntensity = 0.65;
+    this.scene.environmentIntensity = lerp(.72,.035,this.night);
 
   }
   render(_hero: T.Object3D, _garage = false, _stationary = false) {
     if (!this.renderer) return;
+    // Refresh reflections while paused/in a menu, never stall a driving frame
+    // with panorama baking or PMREM work. Day/night brightness still tracks live.
+    if(_stationary&&this.env&&this.environmentKey!==`${Math.floor(this.settings.hour)}:${this.settings.weather}`)this.environment();
     this.renderer.toneMappingExposure = this.exposure;
     this.renderer.info.reset();
     this.gpuTimer?.begin();

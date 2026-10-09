@@ -12,17 +12,17 @@ export const treeFoliageMaterial=()=>new T.MeshStandardMaterial({name:'coastal_f
 function needleSpray(seed:number) {
   const r=rng(seed), vertices:number[]=[];
   const triangle=(a:T.Vector3,b:T.Vector3,c:T.Vector3)=>vertices.push(a.x,a.y,a.z,b.x,b.y,b.z,c.x,c.y,c.z);
-  for(let f=0;f<9;f++) {
-    const angle=f/9*Math.PI*2+r()*.5;
+  for(let f=0;f<7;f++) {
+    const angle=f/7*Math.PI*2+r()*.5;
     const axis=new T.Vector3(Math.cos(angle), (r()-.3)*.7, Math.sin(angle)).normalize();
     const side=new T.Vector3(-axis.z,0,axis.x).normalize();
     const origin=new T.Vector3((r()-.5)*.4,(r()-.5)*.7,(r()-.5)*.4);
-    for(let j=0;j<7;j++)for(const sign of [-1,1]){
-      const t=j/7, base=origin.clone().addScaledVector(axis,t*.85);
+    for(let j=0;j<6;j++)for(const sign of [-1,1]){
+      const t=j/6, base=origin.clone().addScaledVector(axis,t*.85);
       const length=(.32+ r()*.17)*(1-t*.45);
       const tip=base.clone().addScaledVector(axis,.20).addScaledVector(side,sign*length);
       tip.y+=.08+ r()*.11;
-      const mid=base.clone().lerp(tip,.48),width=.06*(1-t*.3);
+      const mid=base.clone().lerp(tip,.48),width=.08*(1-t*.3);
       const left=mid.clone().addScaledVector(axis,width),right=mid.clone().addScaledVector(axis,-width);
       triangle(base,left,tip);triangle(base,tip,right);
     }

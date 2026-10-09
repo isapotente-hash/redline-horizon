@@ -189,3 +189,13 @@ Traffic uses a speed-dependent safety range independently of scenery distance. S
 The pause screen uses the original menu. The dashboard design was removed; new proposals are reviewed separately before implementation.
 
 Validation: 236 full-suite regressions, 19 final traffic/assist/pursuit checks including 360 km/h streaming and race-grid visibility, four build-integrity checks, and production WebGL screenshots and navigation checks on desktop and phone. Hardware frame rates and live multiplayer latency are not measured by these checks.
+
+## Realistic graphics and rendering efficiency
+
+The browser edition uses a baked HDR reflection panorama with a land horizon, bright cloud highlights and a warm sun. Paint, glass and wheels keep their existing meshes and gain more natural material responses. Reflections bake at startup and refresh in stationary menus, keeping PMREM work out of driving frames; live day/night brightness still updates. Clear weather uses a cleaner atmospheric sky and restrained colour grading.
+
+Asphalt has aggregate relief, broad wear variation and packed relief/roughness channels. Golden fields combine fine straw with broad patches using baked texture samples. Clouds use a small mipmapped density texture instead of evaluating three procedural noise octaves per pixel. These assets are generated locally once and remain available in the self-contained offline HTML.
+
+Adjacent road ribbons sharing a material are merged within their original culling sectors. Near foliage uses wider, fewer needle sprays. Tree LOD tracks the viewing position, applies hysteresis and reuses membership buffers; unchanged batches avoid matrix/colour uploads. Automatic graphics, full CSS resolution, existing traffic safety and the original pause menu remain available.
+
+Validation: 237 gameplay/world regressions and production/offline builds. A controlled headless software-WebGL comparison at 320×180, three fixed road locations and two effect tiers rendered 15–26% fewer triangles and had lower synchronous frame-readback cost in all six cases. Traffic was hidden for this renderer comparison; world distances remained fixed. These synthetic results do not establish hardware FPS or guarantee Forza-level fidelity. Real-device FPS must still be measured on the target phone/computer.

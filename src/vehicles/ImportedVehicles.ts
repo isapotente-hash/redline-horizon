@@ -21,9 +21,9 @@ export function importedVehicle(spec:CarSpec):CarVisual|undefined {
 export function createImportedVehicle(template:T.Group,spec:CarSpec):CarVisual {
   const root=template.clone(true),body=root.getObjectByName('body') as T.Group;
   const materials=new Map<T.Material,T.Material>();
-  const paint=new T.MeshPhysicalMaterial({name:'paint',color:spec.color,metalness:.65,roughness:.25,clearcoat:1});
+  const paint=new T.MeshPhysicalMaterial({name:'paint',color:spec.color,metalness:.55,roughness:.21,clearcoat:1,clearcoatRoughness:.09});
   const alloy=new T.MeshStandardMaterial({name:'alloy',color:0x9ba3ae,metalness:.9,roughness:.27});
-  const glass=new T.MeshPhysicalMaterial({name:'glass',color:0x163040,roughness:.15,metalness:.4,clearcoat:1});
+  const glass=new T.MeshPhysicalMaterial({name:'glass',color:0x24313b,roughness:.09,metalness:.05,clearcoat:1,clearcoatRoughness:.07});
   const brake=new T.MeshStandardMaterial({name:'brake_led',color:0xff1830,emissive:0xff1020,emissiveIntensity:.6});
   const head=new T.MeshStandardMaterial({name:'head_led',color:0xe6f5ff,emissive:0xbce8ff,emissiveIntensity:1.8});
   root.traverse(o=>{if(o instanceof T.Mesh){

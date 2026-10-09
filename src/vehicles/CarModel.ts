@@ -24,10 +24,10 @@ export function makeCar(hero = true, color = "#b81120"): CarVisual {
   const paint = new T.MeshPhysicalMaterial({
     name: "paint",
     color,
-    metalness: 0.68,
-    roughness: 0.24,
+    metalness: 0.55,
+    roughness: 0.21,
     clearcoat: 1,
-    clearcoatRoughness: 0.075,
+    clearcoatRoughness: 0.09,
   });
   const alloy = new T.MeshStandardMaterial({
       name: "alloy",
@@ -37,8 +37,8 @@ export function makeCar(hero = true, color = "#b81120"): CarVisual {
     }),
     glass = new T.MeshPhysicalMaterial({
       name: "glass",
-      color: "#11202a",
-      metalness: 0.25,
+      color: "#24313b",
+      metalness: 0.05,
       roughness: 0.09,
       transparent: true,
       opacity: 0.83,
