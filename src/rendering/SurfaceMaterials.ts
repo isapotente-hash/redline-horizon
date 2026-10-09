@@ -1,10 +1,27 @@
 import * as T from 'three';
+import {rng} from '../core/math';
+
+let sharedSurface:T.DataTexture|undefined;
+function bakedSurface(){
+  if(sharedSurface)return sharedSurface;
+  const size=256,pixels=new Uint8Array(size*size*4),random=rng(5831);
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const i=(y*size+x)*4,u=x/size*Math.PI*2,v=y/size*Math.PI*2;
+    pixels[i]=Math.round(92+random()*110);
+    pixels[i+1]=Math.round(128+Math.sin(u*3+Math.sin(v*2))*52+Math.cos(v*5-u)*21);
+    const ridge=Math.sin(u*32+Math.sin(v*3)*.8)+Math.sin(u*61-v*2)*.34;
+    pixels[i+2]=Math.round(128+ridge*73);pixels[i+3]=255;
+  }
+  const t=new T.DataTexture(pixels,size,size);t.wrapS=t.wrapT=T.RepeatWrapping;t.magFilter=T.LinearFilter;t.minFilter=T.LinearMipmapLinearFilter;t.generateMipmaps=true;t.needsUpdate=true;sharedSurface=t;return t;
+}
 
 /** World-space detail stays continuous across terrain chunk boundaries. */
 export function surfaceDetail<M extends T.MeshStandardMaterial>(material:M, kind:'ground'|'rock'|'bark',field?:T.Texture):M {
-  material.customProgramCacheKey=()=>`coastal-detail-v3-${kind}-${!!field}`;
+  const surface=kind==='ground'?undefined:bakedSurface();
+  material.customProgramCacheKey=()=>`coastal-detail-v4-${kind}-${!!field}`;
   material.onBeforeCompile=shader=>{
     if(field)shader.uniforms.detailFieldMap={value:field};
+    if(surface)shader.uniforms.detailSurfaceMap={value:surface};
     shader.vertexShader=shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vDetailWorld;\nvarying vec3 vDetailLocal;');
     shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       vDetailLocal=transformed;
@@ -15,6 +32,7 @@ export function surfaceDetail<M extends T.MeshStandardMaterial>(material:M, kind
       vDetailWorld=(modelMatrix*detailPosition).xyz;`);
     shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>
       ${field?'uniform sampler2D detailFieldMap;':''}
+      ${surface?'uniform sampler2D detailSurfaceMap;':''}
       varying vec3 vDetailWorld;
       varying vec3 vDetailLocal;
       float detailHash(vec2 p){vec3 q=fract(vec3(p.xyx)*.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
@@ -30,13 +48,13 @@ export function surfaceDetail<M extends T.MeshStandardMaterial>(material:M, kind
       float fleck=detailNoise(vDetailWorld.xz*26.);
       diffuseColor.rgb*=.72+soil*.30+grain*.18+fleck*.09;`
       :kind==='rock'?`
-      float strata=sin(vDetailWorld.y*5.+detailNoise(vDetailWorld.xz*1.7)*4.);
-      float rockGrain=detailNoise(vDetailWorld.xz*12.+vDetailWorld.y);
-      diffuseColor.rgb*=.74+rockGrain*.28+strata*.10;`
+      vec2 stoneDetail=texture2D(detailSurfaceMap,vDetailWorld.xz*.65+vDetailWorld.y*.13).rg;
+      float strata=sin(vDetailWorld.y*5.+stoneDetail.y*4.);
+      diffuseColor.rgb*=.72+stoneDetail.x*.30+strata*.10;`
       :`float angle=atan(vDetailLocal.z,vDetailLocal.x);
-      float ridge=detailNoise(vec2(angle*21.,vDetailLocal.y*1.8));
-      float crack=smoothstep(.36,.60,ridge);
-      diffuseColor.rgb*=.53+crack*.52+detailNoise(vDetailLocal.xy*35.)*.13;`;
+      vec3 barkDetail=texture2D(detailSurfaceMap,vec2(angle/6.2831853,vDetailLocal.y*.28)).rgb;
+      float crack=smoothstep(.27,.65,barkDetail.b);
+      diffuseColor.rgb*=.49+crack*.55+barkDetail.r*.13;`;
     shader.fragmentShader=shader.fragmentShader.replace('#include <color_fragment>','#include <color_fragment>\n'+detail);
   };
   return material;

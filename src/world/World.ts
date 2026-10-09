@@ -11,6 +11,7 @@ import {barrierGeometry,tunnelGeometry,supportGeometry,structureRange} from "./C
 import {SceneryObstacle,sceneryCollider} from "./SceneryCollider";
 import * as T from "three";
 import {surfaceDetail} from "../rendering/SurfaceMaterials";
+import {sceneryFinish} from '../rendering/SceneryMaterials';
 import {TerrainSampler} from "./TerrainSampler";
 import {makeTreeVariants,treeWoodMaterial,treeFoliageMaterial} from "./TreeModel";
 import { roadRibbon } from "./roadGeometry";
@@ -428,15 +429,15 @@ export class World {
   }
   buildCity() {
     const random = rng(23),
-      glass = new T.MeshStandardMaterial({
+      glass = sceneryFinish(new T.MeshStandardMaterial({
         color: "#596b77",
         metalness: 0.55,
         roughness: 0.23,
-      }),
-      concrete = new T.MeshStandardMaterial({
+      }),'glass'),
+      concrete = sceneryFinish(new T.MeshStandardMaterial({
         color: "#b1afa4",
         roughness: 0.9,
-      }),
+      }),'plaster'),
       windows = new T.MeshStandardMaterial({
         color: "#a3c0c6",
         metalness: 0.5,
