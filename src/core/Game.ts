@@ -144,7 +144,7 @@ export class Game {
     this.trackEditor.onMultiplayer=(track,laps)=>{
       if(this.network.pendingRace||this.network.raceLocked){this.trackEditor.reportError("Finish the shared race before changing tracks");return;}
       if(this.network.code&&!this.network.host){this.trackEditor.reportError("The host chooses the course. Leave the room to host your own.");return;}
-      if(this.network.setRaceSettings({...this.network.raceSettings,route:"custom",track,laps:laps===3?3:1})){this.multiplayerPrevious="tracks";this.setState("multiplayer");this.ui.toast("Host a room or ready up — your course will be shared automatically");}
+      if(this.network.setRaceSettings({...this.network.raceSettings,route:"custom",track,laps:laps===3?3:1})){this.multiplayerPrevious="tracks";this.setState("multiplayer");this.ui.toast("Track selected.");}
       else this.trackEditor.reportError("Wait for the room to connect before changing tracks.");
     };
     this.network.setName(this.save.settings.driverName);
@@ -197,7 +197,7 @@ export class Game {
       this.resultShown=false;this.camera.setMode(0);this.setState('drive');
       this.ui.toast(`ROOM ${this.network.code} · ${laps} lap${laps>1?'s':''} · ${this.network.ghost?'Ghost mode':'Player contact on'}`);
     };
-    this.save.onError = () => this.ui.toast("Progress could not be saved. Browser storage is unavailable or full.");
+    this.save.onError = () => this.ui.toast("Progress could not be saved.");
     this.ui.onAction = (a) => void this.action(a);
     this.ui.onSetting = (k, v) => {
       if((k==="weather"||k==="rainIntensity")&&(this.race?.active||this.network?.raceLocked)){this.ui.toast("Change weather before the next race");this.ui.sync();return;}
@@ -344,8 +344,7 @@ export class Game {
     return level;
   }
   private graphicsStatus(){
-    const menu=this.state!=='drive'&&this.state!=='photo'&&!this.preparingWorld;
-    this.ui.graphicsStatus(menu?"Menu preview · Very Low · driving preferences resume when you play":this.save.settings.autoGraphics?`Auto · ${this.autoGraphics.profile.label} · target ${this.autoGraphics.targetFps} FPS · ${this.worldSettings.renderDistance} m render / ${this.worldSettings.simulationDistance} m simulation`:"Manual graphics · automatic adjustment off");
+    this.ui.graphicsStatus(this.save.settings.autoGraphics?`Automatic · ${this.autoGraphics.profile.label}`:"Manual");
   }
   private syncMusic(){this.audio.music(this.save.settings.music,this.save.settings.volume,this.state==='drive'&&!this.preparingWorld&&!document.hidden);}
   applySettings(changed = "") {
