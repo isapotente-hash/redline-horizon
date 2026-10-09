@@ -135,10 +135,11 @@ export class Particles {
     for (const name of ["position", "color", "alpha", "size"])
       this.geometry.getAttribute(name).needsUpdate = true;
     this.rain.visible = s.weather === "rain" && active;
-    this.rainGeometry.setDrawRange(0,Math.floor(1200*(.15+.85*s.rainIntensity))*2);
+    const rainCount=Math.floor((s.quality==='low'||s.quality==='very-low'?480:1200)*(.15+.85*s.rainIntensity));
+    this.rainGeometry.setDrawRange(0,rainCount*2);
     (this.rain.material as T.LineBasicMaterial).opacity=.15+s.rainIntensity*.22;
     if (this.rain.visible) {
-      for (let i = 0; i < 1200; i++) {
+      for (let i = 0; i < rainCount; i++) {
         const j = i * 6;
         let x = this.rainPositions[j],
           y = this.rainPositions[j + 1] - dt * 24,

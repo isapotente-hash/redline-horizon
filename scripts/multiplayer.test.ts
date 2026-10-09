@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {makeDrawnTrack} from '../src/racing/DrawnTrack';
 import {EventEmitter} from 'node:events';
 import {RaceConnection,DataLink,PeerClient} from '../src/multiplayer/RaceConnection';
 import {validPose,validCode,normalizeCode,roomCode,Pose,ROOM_PREFIX} from '../src/multiplayer/Protocol';
@@ -69,7 +70,7 @@ for(const count of [2,3,4,5])test(`${count}-player room relays all poses, synchr
     host.send({...pose(),seq:5,race:host.session,finished:true,time:120},true);
     host.send({...pose(),seq:6,race:'',finished:false},true);
     for(const c of clients.slice(1))c.send({...pose(),seq:5,race:c.session,finished:true,time:120},true);
-    await flush();assert.equal(host.raceLocked,false,'completed room can admit new players');
+    await flush();assert.equal(host.raceLocked,false,'completed room can admit new players');assert.ok(clients.every(c=>!c.raceLocked),'guests unlock rematches too');
     host.leave();await flush();assert.ok(clients.every(c=>!c.connected));assert.equal(Peer.peers.size,0);
   }finally{clients.forEach(c=>c.leave());late.leave();}
 });
@@ -182,4 +183,17 @@ test('driver names, host weather rules and safe reconnection survive a lost gues
   assert.equal(host.setRaceSettings({route:'coast',laps:1,vehicleClass:'all',startRule:'grid',weather:'rain'}),true);await flush();assert.equal(guest.raceSettings.weather,'rain');assert.equal(guest.setRaceSettings({...host.raceSettings,weather:'clear'}),false);
   const code=host.code;const link=Peer.peers.get(ROOM_PREFIX+code)!.links.find(l=>l.open)!;link.close();await flush();assert.equal(guest.connected,false);assert.equal(guest.lastRoom,code);assert.equal(host.playerCount,1);assert.equal(guest.raceLocked,false);await guest.open(false,guest.lastRoom);await flush();await flush();assert.equal(guest.connected,true);assert.equal(host.playerCount,2);assert.equal(host.drivers.get(guest.slot)?.name,'Guest');assert.equal(guest.raceSettings.weather,'rain');
  }finally{host.leave();guest.leave();}
+});
+
+test('five-player custom courses are shared identically, wait for preparation and support rematches',async()=>{
+ const clients=Array.from({length:5},()=>new RaceConnection(async()=>Peer)),host=clients[0];
+ const track=makeDrawnTrack([[.2,.2],[.8,.2],[.8,.8],[.2,.8]],'Friends circuit',16);let prepared=0,started=0;
+ clients.forEach(c=>{c.prepareRace=settings=>{assert.deepEqual(settings.track,track);prepared++;return true;};c.onStart=(_id,_at,laps,settings)=>{assert.equal(laps,3);assert.deepEqual(settings.track,track);started++;};});
+ try{
+  assert.ok(host.setRaceSettings({...host.raceSettings,route:'custom',track,laps:3}));await host.open(true);await flush();
+  for(const guest of clients.slice(1)){await guest.open(false,host.code);await flush();assert.deepEqual(guest.raceSettings.track,track);}
+  clients.forEach(c=>c.setReady(true));await flush();host.requestRace(3);await flush();assert.equal(prepared,5);assert.equal(started,5);
+  clients.forEach(c=>c.send({...pose(),race:c.session,seq:11,finished:true,time:120},true));await flush();assert.ok(clients.every(c=>!c.raceLocked));
+  host.requestRace(3);await flush();assert.equal(started,10);assert.equal(prepared,10);
+ }finally{clients.forEach(c=>c.leave());}
 });

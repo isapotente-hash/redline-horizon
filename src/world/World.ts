@@ -1,5 +1,7 @@
 import {RACE_ROUTES,routeRoad} from '../racing/RouteCatalog';
 import {routePreview} from './RoutePreview';
+import {treeBudget} from '../rendering/RenderBudget';
+import {mobileDevice} from '../input/DevicePolicy';
 import {wetness} from '../core/Weather';
 import {PavementUnion} from './PavementUnion';
 import {wallOpening} from "./RoadLandmarks";
@@ -35,6 +37,7 @@ type Chunk = {
   obstacleColliders:Map<SceneryObstacle,ReturnType<typeof sceneryCollider>>;
 };
 export class World {
+  private mobile=typeof navigator!=='undefined'&&typeof window!=='undefined'&&mobileDevice();
   root = new T.Group();
   roadsGroup = new T.Group();
   chunks = new Map<string, Chunk>();
@@ -342,7 +345,7 @@ export class World {
     const chunk:Chunk={group,geometry:g,x,z,treeBatches,treeLod:1,grass,obstacles,obstacleColliders:new Map()};this.chunks.set(`${x},${z}`,chunk);return chunk;
   }
   update(p: T.Vector3, force = false, view=p) {
-    const now=performance.now(),settingsKey=`${this.settings.renderDistance}:${this.settings.simulationDistance}`;
+    const now=performance.now(),settingsKey=`${this.settings.renderDistance}:${this.settings.simulationDistance}:${this.settings.quality}`;
     const changed=settingsKey!==this.updateSettings;
     if(!force&&!changed&&now-this.lastUpdate<100)return;
     this.lastUpdate=now;this.updateSettings=settingsKey;
@@ -366,7 +369,8 @@ export class World {
     for (const [key, c] of this.chunks) {
       const d = Math.hypot(c.x - cx, c.z - cz);
       if(updateLod){
-        const nearDistance=140;
+        const {nearDistance,light}=treeBudget(this.settings.quality,this.mobile);
+        for(const batch of c.treeBatches){const geometry=light?this.treeVariants[batch.variant].light:this.treeVariants[batch.variant].near;if(batch.nearFoliage.geometry!==geometry.foliage){batch.nearFoliage.geometry=geometry.foliage;batch.nearWood.geometry=geometry.wood;batch.nearFoliage.boundingSphere=batch.nearWood.boundingSphere=null;}}
         const membership=c.treeNextMembership??=new Uint8Array(c.treeBatches.reduce((n,b)=>n+b.transforms.length,0));let membershipIndex=0,membershipChanged=!c.treeMembership;
         for(const batch of c.treeBatches)for(const m of batch.transforms){const e=m.elements;
           // Hysteresis keeps trees stable as the player crosses the LOD boundary.

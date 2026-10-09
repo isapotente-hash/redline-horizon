@@ -14,6 +14,7 @@ export const AUTO_GRAPHICS = [
  * Failed upgrades are held back for a minute instead of oscillating.
  */
 export class AutoGraphics {
+  constructor(private readonly maxLevel=4){}
   level=0;
   targetFps:30|60=60;
   private elapsed=0;
@@ -63,7 +64,7 @@ export class AutoGraphics {
       this.slow=0;
     }
     if(this.fast>=20&&this.elapsed>=this.targetUpgradeAt){this.targetFps=60;return this.change();}
-    if(this.good>=(this.calibrating?1.5:12)&&this.level<AUTO_GRAPHICS.length-1&&this.elapsed>=this.upgradeAt){this.level++;if(this.level===AUTO_GRAPHICS.length-1)this.calibrating=false;return this.change();}
+    if(this.good>=(this.calibrating?1.5:12)&&this.level<this.maxLevel&&this.elapsed>=this.upgradeAt){this.level++;if(this.level===this.maxLevel)this.calibrating=false;return this.change();}
     return false;
   }
 }

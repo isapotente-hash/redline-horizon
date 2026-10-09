@@ -22,6 +22,12 @@ export class RoadNetwork {
   roads: Road[] = [];
   grid = new Map<string, { road: Road; i: number }[]>();
   main: Road;
+  drawnRoad?:Road;
+  setDrawnRoad(road:Road|undefined){
+    if(this.drawnRoad){this.roads=this.roads.filter(r=>r!==this.drawnRoad);for(const [key,items] of this.grid){const kept=items.filter(i=>i.road!==this.drawnRoad);if(kept.length)this.grid.set(key,kept);else this.grid.delete(key);}}
+    this.drawnRoad=road;if(!road)return;this.roads.push(road);
+    for(let i=0;i<road.samples.length-1;i++){const key=this.key(road.samples[i].p.x,road.samples[i].p.z);const items=this.grid.get(key)??[];items.push({road,i});this.grid.set(key,items);}
+  }
   readonly layoutVersion=2;
   bounds={minX:0,maxX:0,minZ:0,maxZ:0};
   structures:{road:Road;start:number;end:number;kind:"tunnel"|"bridge"}[]=[];

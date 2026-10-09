@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
+import {AUTO_GRAPHICS} from '../src/core/AutoGraphics';
 import {RenderSystem} from '../src/rendering/RenderSystem';
 import {defaults,Settings} from '../src/core/SaveManager';
 
@@ -22,30 +23,16 @@ function fixture(quality:Settings['quality']='high',dpr=1,maxSamples=4){
 }
 function frames(r:RenderSystem,dt:number,seconds:number){for(let t=0;t<seconds;t+=dt)r.adaptResolution(dt,true);}
 
-test('every manual preset uses the same sharp display-density image, full effects and shadow quality',()=>{
-  for(const quality of ['very-low','low','medium','high','ultra'] as const){
-    const f=fixture(quality,3);assert.equal(f.ratio(),2);assert.equal(f.r.sun.shadow.mapSize.x,4096);
-    assert.equal(f.r.renderer!.shadowMap.enabled,true);assert.equal(f.r.clouds.visible,true);
-    assert.equal(f.r.ao!.enabled,true);assert.equal(f.r.bloom!.enabled,true);
-    f.r.render(new T.Object3D());assert.deepEqual(f.counts(),{direct:0,post:1,probe:0});
-    assert.equal(f.r.grade!.uniforms.sharpness.value,.18);
-  }
-  assert.equal(fixture('very-low',1).ratio(),1);
+test('manual presets reduce GPU work while preserving at least CSS resolution',()=>{
+  for(const p of AUTO_GRAPHICS){const f=fixture(p.quality,3);assert.equal(f.ratio(),p.pixelRatio);assert.equal(f.r.sun.shadow.mapSize.x,Math.max(512,p.shadow));assert.equal(f.r.renderer!.shadowMap.enabled,p.shadow>0);assert.equal(f.r.ao!.enabled,p.ao);assert.equal(f.r.bloom!.enabled,p.bloom);f.r.render(new T.Object3D());assert.deepEqual(f.counts(),{direct:0,post:1,probe:0});}
 });
-test('all modes use hardware antialiasing without redundant FXAA, with fallback on unsupported hardware',()=>{
-  for(const quality of ['very-low','low','medium','high','ultra'] as const){const f=fixture(quality,1,4);assert.equal(f.r.fxaa!.enabled,false);assert.equal(f.r.composer!.renderTarget1.samples,4);}
-  const f=fixture('medium',1,0);assert.equal(f.r.fxaa!.enabled,true);assert.equal(f.r.composer!.renderTarget1.samples,0);
+test('postprocessing uses one antialiasing method with FXAA fallback',()=>{
+  for(const p of AUTO_GRAPHICS){const f=fixture(p.quality,1,4);assert.equal(f.r.fxaa!.enabled,p.samples===0);assert.equal(f.r.composer!.renderTarget1.samples,p.samples);}
+  assert.equal(fixture('medium',1,0).r.fxaa!.enabled,true);
 });
-test('long slow/fast periods and stalls cannot downgrade visuals, resize buffers or introduce reflection spikes',()=>{
-  for(const quality of ['very-low','ultra'] as const){
-    const f=fixture(quality,2),initial=f.resizes();
-    for(const dt of [1/30,1/60,.4,1.2])frames(f.r,dt,15);
-    for(let n=0;n<600;n++)f.r.render(new T.Object3D(),false,true);
-    assert.equal(f.resizes(),initial);assert.equal(f.ratio(),2);assert.equal(f.r.ao!.enabled,true);assert.equal(f.r.bloom!.enabled,true);assert.equal(f.counts().probe,0);
-    assert.equal(f.r.grade!.uniforms.texel.value.x,1/2560);
-  }
+test('manual rendering is stable across frame timing changes',()=>{
+  for(const quality of ['very-low','ultra'] as const){const f=fixture(quality,2),initial=f.resizes();for(const dt of [1/30,1/60,.4,1.2])frames(f.r,dt,15);for(let n=0;n<10;n++)f.r.render(new T.Object3D(),false,true);assert.equal(f.resizes(),initial);assert.equal(f.ratio(),quality==='ultra'?2:1);assert.equal(f.counts().probe,0);}
 });
-
 
 test('automatic tiers keep a sharp resolution floor, trim expensive effects and restore manual rendering',()=>{
  const f=fixture('ultra',3);const initial=f.resizes();

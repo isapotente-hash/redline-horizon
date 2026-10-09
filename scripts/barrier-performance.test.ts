@@ -14,9 +14,9 @@ test('Very Low and 10 m render/10 m simulation limits save and reload; existing 
  for(const quality of ['low','medium','high','ultra']){storage({quality,renderDistance:525,simulationDistance:275});const s=new SaveManager();assert.equal(s.settings.quality,quality);assert.equal(s.settings.renderDistance,525);assert.equal(s.settings.simulationDistance,275);}
  storage({quality:'invalid',renderDistance:-1,simulationDistance:0});const invalid=new SaveManager();assert.equal(invalid.settings.quality,defaults.quality);assert.equal(invalid.settings.renderDistance,10);assert.equal(invalid.settings.simulationDistance,10);
 });
-test('Very Low retains full grass detail, and visual detail is independent of preset names at equal distances',()=>{
+test('Low presets reduce grass density and higher presets restore the existing instances',()=>{
  const grass=new DryGrass(),mesh=grass.batch(1);grass.plant(mesh,0,0,0,0,1);mesh.computeBoundingSphere();mesh.userData.fieldCount=1;
- for(const quality of ['very-low','low','medium','high','ultra'] as const){grass.update({...defaults,quality,renderDistance:100});assert.equal(grass.visible(mesh,new T.Vector3()),true);assert.equal(mesh.count,1);assert.equal(grass.visible(mesh,new T.Vector3(0,0,200)),false);}
+ for(const quality of ['very-low','low','medium','high','ultra'] as const){grass.update({...defaults,quality,renderDistance:100});assert.equal(grass.visible(mesh,new T.Vector3()),true);assert.equal(mesh.count,quality==='very-low'||quality==='low'?0:1);assert.equal(grass.visible(mesh,new T.Vector3(0,0,200)),false);}
  mesh.dispose();grass.material.dispose();grass.geometry.dispose();
 });
 test('all eight vehicles allow walking across front/rear and along both sides, retain solid contact and have no leftover seated collider',async()=>{

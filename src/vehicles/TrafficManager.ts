@@ -239,10 +239,9 @@ export class TrafficManager {
       );
       if(c.turn)desired=Math.min(desired,10);
       else if(!c.road.closed)desired=Math.min(desired,Math.sqrt(4*Math.max(0,(c.direction>0?c.road.length-c.d:c.d)-7)));
-      const toPlayer = player.clone().sub(c.root.position),
-        f = a.t.clone().multiplyScalar(c.direction),
-        along = toPlayer.dot(f),
-        side = Math.abs(toPlayer.dot(a.r));
+      const dx=player.x-c.root.position.x,dy=player.y-c.root.position.y,dz=player.z-c.root.position.z,
+        along=(dx*a.t.x+dy*a.t.y+dz*a.t.z)*c.direction,
+        side=Math.abs(dx*a.r.x+dy*a.r.y+dz*a.r.z);
       if (along > 0 && along < 65 && side < 2.1)
         desired = Math.min(desired, Math.max(0, (along - 8) * 0.7));
       for (let j = 0; j < count; j++) {
@@ -262,7 +261,8 @@ export class TrafficManager {
       const distance=c.root.position.distanceTo(view);
       c.root.visible=distance<(c.root.visible?range.visible+60:range.visible);
       const detailDistance=c.root.position.distanceTo(view);
-      c.detail.visible=c.bike||detailDistance<(c.detail.visible?180:150);
+      const nearDetail=_quality==='very-low'||_quality==='low'?65:150;
+      c.detail.visible=c.bike||detailDistance<(c.detail.visible?nearDetail+30:nearDetail);
       c.low.visible=!c.detail.visible;
     }
   }

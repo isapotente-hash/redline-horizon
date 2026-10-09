@@ -1,5 +1,5 @@
 export type GraphicsQuality = 'very-low' | 'low' | 'medium' | 'high' | 'ultra';
-/** Presets change world budgets only; resolution, materials and effects are shared. */
+/** Scenery-distance presets; RenderBudget sets the matching GPU effects budget. */
 export const GRAPHICS_PRESETS = {
   'very-low': {renderDistance:10, simulationDistance:10},
   low: {renderDistance:500, simulationDistance:150},

@@ -188,6 +188,7 @@ export class RaceConnection {
     if(!this.host&&data.t==='lobby'&&Array.isArray(data.drivers)&&data.drivers.length===this.players.length&&new Set(data.drivers.map((d:any)=>d.slot)).size===this.players.length&&data.drivers.every((d:any)=>this.players.includes(d.slot)&&typeof d.ready==='boolean'&&CARS.some(c=>c.id===d.car))){
       this.drivers.clear();for(const d of data.drivers)this.drivers.set(d.slot,{ready:d.ready,car:d.car,name:cleanName(d.name),latency:Number.isFinite(d.latency)?Math.max(0,Math.min(10000,d.latency)):0});this.onChange();return;
     }
+    if(!this.host&&data.t==='race-complete'&&data.id===this.session&&this.raceLocked){this.raceLocked=false;this.change('Race complete. The host can start another race.');return;}
     if(data.t==='ping' &&Number.isFinite(data.at)){
       m.seen=this.now();this.transmit(m,{t:'pong',at:data.at,now:this.now()});return;
     }
@@ -231,7 +232,7 @@ export class RaceConnection {
   }
   private checkFinished(){
     if(this.host&&this.raceLocked&&this.racers.every(slot=>!this.players.includes(slot)||this.finishedSlots.has(slot))){
-      this.raceLocked=false;this.change('Race complete. The host can start another race; new friends can join.');
+      this.raceLocked=false;this.broadcast({t:'race-complete',id:this.session});this.change('Race complete. The host can start another race; new friends can join.');
     }
   }
   private updateHostRoster(){
@@ -254,7 +255,7 @@ export class RaceConnection {
   requestRace(laps:number){
     if(!this.host||!this.raceReady||this.raceLocked||this.pendingRace||!this.canStart())return;
     const id=`${this.code}-${this.now()}-${++this.startSerial}`;
-    const settings={...this.raceSettings,laps:(this.raceSettings.route==="horizon"&&laps===3?3:1) as 1|3};if(!this.canRace(settings))return;
+    const settings={...this.raceSettings,laps:((this.raceSettings.route==="horizon"||this.raceSettings.route==="custom")&&laps===3?3:1) as 1|3};if(!this.canRace(settings))return;
     this.proposal={id,settings,laps:settings.laps,expires:this.now()+45000,slots:[...this.players],ready:new Set()};
     this.pendingRace=true;
     this.broadcast({t:'prepare',id,laps:this.proposal.laps,settings,slots:this.proposal.slots});

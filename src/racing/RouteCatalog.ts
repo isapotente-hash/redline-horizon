@@ -6,9 +6,9 @@ export const RACE_ROUTES=[
  {id:'bracken',name:'Bracken Lane',road:'BRACKEN LANE',description:'Narrow farm lanes, crests and banked bends',closed:false},
  {id:'switchback',name:'Highland Switchbacks',road:'HIGHLAND SWITCHBACKS',description:'Tight hairpins and exposed hillside turns',closed:false},
 ] as const;
-export type RouteId=typeof RACE_ROUTES[number]['id'];
-export const validRoute=(id:unknown):id is RouteId=>RACE_ROUTES.some(r=>r.id===id);
-export function routeRoad(roads:RoadNetwork,id:RouteId):Road{return roads.roads.find(r=>r.name===RACE_ROUTES.find(r=>r.id===id)?.road)||roads.main;}
+export type RouteId=typeof RACE_ROUTES[number]['id']|'custom';
+export const validRoute=(id:unknown):id is RouteId=>id==='custom'||RACE_ROUTES.some(r=>r.id===id);
+export function routeRoad(roads:RoadNetwork,id:RouteId):Road{if(id==='custom'){if(!roads.drawnRoad)throw new Error('Drawn track is not loaded');return roads.drawnRoad;}return roads.roads.find(r=>r.name===RACE_ROUTES.find(r=>r.id===id)?.road)||roads.main;}
 export const PRACTICE_SECTIONS=[
  {id:'coastal-tunnel',name:'Tunnel approach',route:'horizon' as RouteId,distance:610,description:'Approach, tunnel and road-edge recovery'},
  {id:'forest-bends',name:'Forest bends',route:'horizon' as RouteId,distance:1900,description:'Linked corners and braking practice'},

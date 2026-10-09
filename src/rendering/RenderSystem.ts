@@ -1,4 +1,5 @@
-import {AUTO_GRAPHICS} from "../core/AutoGraphics";
+import {renderBudget} from "./RenderBudget";
+import {mobileDevice} from "../input/DevicePolicy";
 import {GpuTimer} from "./GpuTimer";
 import {reflectionPanorama} from './BakedAtmosphere';
 import * as T from "three";
@@ -33,13 +34,14 @@ export class RenderSystem {
   night = 0;
   exposure = 0.95;
   resolutionScale=1;
+  private mobile=mobileDevice();
   private automaticLevel:number|null=null;
   gpuTimer?:GpuTimer;
   get gpuMs(){return this.gpuTimer?.milliseconds??null;}
   private applyEffects(){
     if(this.renderer)this.renderer.shadowMap.autoUpdate=true;
-    if(this.ao)this.ao.enabled=this.automaticLevel===null||AUTO_GRAPHICS[this.automaticLevel].ao;
-    if(this.bloom)this.bloom.enabled=this.automaticLevel===null||AUTO_GRAPHICS[this.automaticLevel].bloom;
+    if(this.ao)this.ao.enabled=renderBudget(this.settings.quality,this.automaticLevel,this.mobile).ao;
+    if(this.bloom)this.bloom.enabled=renderBudget(this.settings.quality,this.automaticLevel,this.mobile).bloom;
   }
   private updateClarity(){
     if(!this.renderer||!this.grade)return;
@@ -122,7 +124,7 @@ export class RenderSystem {
     if (!uiCheck) {
       this.renderer = new T.WebGLRenderer({
         canvas,
-        antialias: true,
+        antialias: false,
         powerPreference: "high-performance",
         preserveDrawingBuffer: false,
       });
@@ -177,22 +179,22 @@ export class RenderSystem {
   }
   applyQuality() {
     if (!this.renderer) return;
-    const profile=this.automaticLevel===null?null:AUTO_GRAPHICS[this.automaticLevel];
-    const size=Math.min(profile?Math.max(512,profile.shadow):4096,this.renderer.capabilities.maxTextureSize||4096);
+    const profile=renderBudget(this.settings.quality,this.automaticLevel,this.mobile);
+    const size=Math.min(Math.max(512,profile.shadow),this.renderer.capabilities.maxTextureSize||4096);
     if(this.sun.shadow.mapSize.x!==size){
       this.sun.shadow.mapSize.set(size,size);
       this.sun.shadow.map?.dispose();
       this.sun.shadow.map=null;
     }
-    this.renderer.shadowMap.enabled=!profile||profile.shadow>0;
+    this.renderer.shadowMap.enabled=profile.shadow>0;
     this.clouds.visible=true;
     // Auto can trim supersampling, but never renders below CSS resolution.
-    this.renderer.setPixelRatio(Math.max(1,Math.min(devicePixelRatio,profile?.pixelRatio??2)));
+    this.renderer.setPixelRatio(Math.max(1,Math.min(devicePixelRatio,profile.pixelRatio)));
     this.resolutionScale=1;
     this.applyEffects();
     if(this.composer){
       this.composer.setPixelRatio(this.renderer.getPixelRatio());
-      const samples=Math.min(profile?.samples??4,this.renderer.capabilities.maxSamples);
+      const samples=Math.min(profile.samples,this.renderer.capabilities.maxSamples);
       for(const target of [this.composer.renderTarget1,this.composer.renderTarget2]){
         if(target.samples!==samples){target.samples=samples;target.dispose();}
       }

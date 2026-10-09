@@ -1,3 +1,6 @@
+import {TrackEditor} from '../ui/TrackEditor';
+import {DrawnTrack,trackId} from '../racing/DrawnTrack';
+import {DrawnTrackWorld} from '../world/DrawnTrackWorld';
 import {AutoGraphics,FramePacer} from "./AutoGraphics";
 import {graphicsPresentation} from "./GraphicsPresentation";
 import {applyDistancePreset} from "./GraphicsPresets";
@@ -59,8 +62,10 @@ const stopped: Controls = {
 export class Game {
   save = new SaveManager();
   input = new InputManager();
-  autoGraphics=new AutoGraphics();
+  autoGraphics=new AutoGraphics(mobileDevice()?2:4);
   private framePacer=new FramePacer();
+  private activeTraffic:TrafficManager["cars"]=[];
+  private enabledTraffic(){this.activeTraffic.length=0;for(const car of this.traffic.cars)if(car.body.isEnabled())this.activeTraffic.push(car);return this.activeTraffic;}
   private worldSettings={...this.save.settings};
   roads = new RoadNetwork();
   autopilot = new Autopilot(this.roads);
@@ -74,6 +79,9 @@ export class Game {
   network = new RaceConnection();
   multiplayer = new MultiplayerPanel(this.ui.root,this.network);
   remotes = PLAYER_COLORS.map(color=>new RemoteVehicle(color));
+  trackEditor=new TrackEditor(this.ui.root,text=>this.ui.toast(text));
+  drawnWorld?:DrawnTrackWorld;
+  private tracksPrevious:State="menu";
   multiplayerPrevious:State='menu';
   networkStart=0;private rollingLaunch=false;
   private selectedRoute:RouteId="horizon";private practice:typeof PRACTICE_SECTIONS[number]|undefined;
@@ -132,6 +140,12 @@ export class Game {
       this.ui.economyKey="";this.ui.sync();
     };
     this.dev.onReset=()=>{this.police.clearWanted();this.vehicle.reset();this.syncCar(1);};
+    this.trackEditor.onSolo=(track,laps)=>void this.startDrawnRace(track,laps);
+    this.trackEditor.onMultiplayer=(track,laps)=>{
+      if(this.network.pendingRace||this.network.raceLocked){this.ui.toast("Finish the shared race before changing tracks");return;}
+      if(this.network.code&&!this.network.host){this.ui.toast("The host chooses the course. Leave the room to host your own.");return;}
+      if(this.network.setRaceSettings({...this.network.raceSettings,route:"custom",track,laps:laps===3?3:1})){this.multiplayerPrevious="tracks";this.setState("multiplayer");this.ui.toast("Host a room or ready up — your course will be shared automatically");}
+    };
     this.network.setName(this.save.settings.driverName);
     this.ui.onSetup=(key,value)=>{this.save.setSetup(key,value);this.vehicle.applyLoadout(this.save.loadout,this.save.setup);};
     this.ui.driverNames=this.network.drivers;
@@ -149,7 +163,7 @@ export class Game {
       this.playerContacts?.clear();
       this.remotes.forEach(remote=>remote.reset());
       if(this.multiplayerPrevious==='results')this.multiplayerPrevious='drive';
-      if(this.race?.networkRace){this.race.cancel();this.traffic.active=true;if(this.state==='results')this.setState('drive');}
+      if(this.race?.networkRace){this.race.cancel();this.leaveDrawnTrack();this.traffic.active=true;if(this.state==='results')this.setState('drive');}
       this.ui.toast('Room closed');
     };
     this.network.onPose=(pose,slot)=>{
@@ -163,7 +177,7 @@ export class Game {
     this.network.prepareRace=async settings=>{
       if(!this.network.canStart()||!this.network.canRace(settings))return false;
       this.preparingWorld=true;this.autopilot.disable();this.setState('loading');this.ui.loading('LOADING RACE ROUTE');
-      try{await this.world.prime(this.roads.at(routeRoad(this.roads,settings.route),80).p);return true;}
+      try{if(settings.route==="custom"&&settings.track)this.activateDrawnTrack(settings.track);else {this.leaveDrawnTrack();await this.world.prime(this.roads.at(routeRoad(this.roads,settings.route),80).p);}return true;}
       catch{this.ui.toast('Race route could not be loaded',2);return false;}
       finally{this.preparingWorld=false;if(this.state==='loading')this.setState('multiplayer');}
     };
@@ -174,7 +188,7 @@ export class Game {
       this.race.start(this.vehicle,laps,true,settings.route);
       this.race.configurePlayers(this.network.racers,this.network.slot);
       this.vehicle.teleport(this.race.route,this.race.startDistance-Math.floor(this.network.slot/2)*7,(this.network.slot%2?.24:-.24)*this.race.route.width);
-      this.world.update(this.vehicle.position,true);this.traffic.active=false;
+      if(!this.drawnWorld)this.world.update(this.vehicle.position,true);this.traffic.active=false;
       this.resultShown=false;this.camera.setMode(0);this.setState('drive');
       this.ui.toast(`ROOM ${this.network.code} · ${laps} lap${laps>1?'s':''} · ${this.network.ghost?'Ghost mode':'Player contact on'}`);
     };
@@ -320,7 +334,7 @@ export class Game {
   }
   private syncWorldSettings(){
     Object.assign(this.worldSettings,this.save.settings);
-    const {level,...presentation}=graphicsPresentation(this.save.settings,this.autoGraphics.level,this.state==='drive'||this.state==='photo'||this.preparingWorld);
+    const {level,...presentation}=graphicsPresentation(this.save.settings,this.autoGraphics.level,this.state==='drive'||this.state==='photo'||this.preparingWorld,mobileDevice());
     Object.assign(this.worldSettings,presentation);
     return level;
   }
@@ -344,7 +358,8 @@ export class Game {
     if(changed==="autoGraphics"){this.autoGraphics.restart();this.framePacer.reset();}
     if(changed==="quality")applyDistancePreset(this.save.settings);
     this.render.setAutomaticLevel(this.syncWorldSettings());
-    if(changed==="autoGraphics"||changed==="quality"||changed==="renderDistance"||changed==="simulationDistance")this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);
+    if(changed==="quality")this.render.applyQuality();
+    if(changed==="autoGraphics"||changed==="quality"||changed==="renderDistance"||changed==="simulationDistance")if(!this.drawnWorld)this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);
     this.ui.sync();this.graphicsStatus();
     this.syncMusic();
   }
@@ -357,7 +372,7 @@ export class Game {
     this.previous = this.state;
     this.state = state;
     this.framePacer.reset();
-    if(this.render){this.render.setAutomaticLevel(this.syncWorldSettings());if(this.world&&this.vehicle)this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);}
+    if(this.render){this.render.setAutomaticLevel(this.syncWorldSettings());if(this.world&&this.vehicle&&!this.drawnWorld)this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);}
     this.save.background=state==='drive';
     if(state!=='drive'){this.slipstream.reset();if(this.vehicle)this.vehicle.slipstreamStrength=0;}
     if(state!=='drive')this.playerContacts?.clear();
@@ -373,17 +388,18 @@ export class Game {
     }
     const garage = state === "garage" || state === "workshop";
     const worldActive=state==='drive'||state==='photo';
-    this.world.root.visible = !garage;
-    this.traffic.root.visible = worldActive&&!this.practice;
+    this.world.root.visible = !garage&&!this.drawnWorld;
+    if(this.drawnWorld)this.drawnWorld.root.visible=!garage;
+    this.traffic.root.visible = worldActive&&!this.practice&&!this.drawnWorld;
     this.race.ai.root.visible =
-      worldActive && !this.race.networkRace && (this.race.active || this.race.finished);
+      worldActive && !this.race.networkRace && !this.race.solo && (this.race.active || this.race.finished);
     this.race.gate.visible = worldActive && this.race.active;
     this.race.finish.visible = worldActive && (this.race.active||this.race.finished);
     this.particles.root.visible = worldActive;
     this.police.root.visible = worldActive;
-    this.boosts.root.visible=worldActive;
-    this.coins.root.visible=worldActive&&!this.practice;
-    this.render.water.visible = !garage;
+    this.boosts.root.visible=worldActive&&!this.drawnWorld;
+    this.coins.root.visible=worldActive&&!this.practice&&!this.drawnWorld;
+    this.render.water.visible = !garage&&!this.drawnWorld;
     this.render.studio.visible = garage;
     if (garage) {
       this.render.studio.position.copy(this.vehicle.position);
@@ -395,7 +411,7 @@ export class Game {
   private async prepareWorld(){
     this.preparingWorld=true;this.setState("loading");this.ui.loading("LOADING AREA");
     try{
-      await this.world.prime(this.vehicle.position);this.syncCar(1);
+      if(!this.drawnWorld)await this.world.prime(this.vehicle.position);this.syncCar(1);
       this.render.updateAtmosphere(this.elapsed,this.vehicle.position);
       this.camera.update(0,this.vehicle,this.car.root,"drive",this.elapsed,stopped);
       this.render.render(this.car.root); // Warm post-processing before play, not on the first drive frame.
@@ -407,6 +423,11 @@ export class Game {
       return;
     }
     if (!this.running||!this.vehicle||this.preparingWorld) return;
+    if(action==='track-editor'){
+      if(this.police.active||this.police.rules.impound||this.network.pendingRace||this.network.raceLocked){this.ui.toast("Finish the pursuit or shared race before drawing a track");return;}
+      this.tracksPrevious=this.state;this.setState("tracks");this.trackEditor.renderSaved();return;
+    }
+    if(action==='track-back'){this.setState(this.tracksPrevious);return;}
     if(action.startsWith('route:')){if(this.state==='drive'&&this.autopilot.enabled&&this.save.settings.autopilotMode!=='speed'&&this.autopilot.routes.choice?.visible&&this.autopilot.routes.select(Number(action.slice(6)))){this.ui.routeChoice(undefined);this.routeVisible=false;}return;}
     if(action==='vehicle-toggle'){this.toggleFoot();return;}
     if(this.foot.active&&action==='autopilot'){this.ui.toast('Enter the vehicle to use autopilot');return;}
@@ -427,8 +448,8 @@ export class Game {
     }
     if(action.startsWith('race-route:')){
       const id=action.slice(11);if(!validRoute(id))return;
-      if(this.network.connected){if(this.network.host)this.network.setRaceSettings({...this.network.raceSettings,route:id,laps:1});this.multiplayerPrevious=this.state;this.setState('multiplayer');return;}
-      this.selectedRoute=id;await this.action('race');return;
+      if(this.network.connected){if(this.network.host)this.network.setRaceSettings({...this.network.raceSettings,route:id,track:undefined,laps:1});this.multiplayerPrevious=this.state;this.setState('multiplayer');return;}
+      this.leaveDrawnTrack();this.selectedRoute=id;await this.action('race');return;
     }
     this.audio.click(this.save.settings.volume);
     if(action==='dev-open'){if(this.state==='menu'){this.devPanel.lock();this.setState('dev');this.devPanel.focus();}return;}
@@ -451,7 +472,7 @@ export class Game {
       if(this.network.pendingRace){this.ui.toast('Preparing the shared race');return;}
       this.practice=undefined;this.ui.practiceName="";this.coins.root.visible=true;
       if(!this.running||this.preparingWorld||!this.network.connected)return;
-      if(!this.race.networkRace){this.race.cancel();this.traffic.active=true;this.vehicle.teleport(this.roads.main,120-Math.floor(this.network.slot/2)*7,this.network.slot%2?5.5:2);this.world.update(this.vehicle.position,true);}
+      if(!this.race.networkRace){this.race.cancel();this.leaveDrawnTrack();this.traffic.active=true;this.vehicle.teleport(this.roads.main,120-Math.floor(this.network.slot/2)*7,this.network.slot%2?5.5:2);this.world.update(this.vehicle.position,true);}
       this.setState('drive');return;
     }
     if(this.network.connected&&action==='race'){
@@ -493,6 +514,7 @@ export class Game {
         this.ui.toast(this.autopilot.enabled ? `${this.save.settings.autopilotMode === "steering" ? "Steering assist" : this.save.settings.autopilotMode === "speed" ? "Speed assist" : "Full autopilot"} on` : "Autopilot off");
         break;
       case "drive":
+        this.leaveDrawnTrack();
         this.practice=undefined;this.ui.practiceName="";this.coins.root.visible=true;
         this.race.cancel();
         this.traffic.active=true;
@@ -501,6 +523,7 @@ export class Game {
         this.setState("drive");
         break;
       case "continue":
+        this.leaveDrawnTrack();
         this.practice=undefined;this.ui.practiceName="";this.coins.root.visible=true;
         this.race.cancel();this.traffic.active=true;
         if (this.save.position) {
@@ -514,7 +537,7 @@ export class Game {
         this.setState("drive");
         break;
       case "resume":
-        if (this.race.finished) {
+        if (this.race.finished&&!this.drawnWorld) {
           this.practice=undefined;this.ui.practiceName="";this.coins.root.visible=true;
           this.race.cancel();
           this.traffic.active = true;
@@ -525,7 +548,7 @@ export class Game {
         this.setState("pause");
         break;
       case "menu":
-        this.persist();
+        this.persist();this.leaveDrawnTrack();
         this.race.cancel();
         this.traffic.active = true;
         this.setState("menu");
@@ -577,6 +600,7 @@ export class Game {
         );
         break;
       case "race":
+        if(this.drawnWorld){await this.startDrawnRace(this.drawnWorld.track,this.race.laps);break;}
         this.practice=undefined;this.ui.practiceName="";this.coins.root.visible=true;
         this.race.best=raceCondition(this.save.settings)==="wet"?(this.selectedRoute==="horizon"?this.save.wetBestByLaps[this.save.settings.raceLaps]||0:this.save.wetRouteBests[this.selectedRoute]||0):this.selectedRoute==="horizon"?(this.save.bestByLaps[this.save.settings.raceLaps]||0):(this.save.routeBests[this.selectedRoute]||0);
         this.race.start(this.vehicle,this.save.settings.raceLaps,false,this.selectedRoute);
@@ -597,6 +621,7 @@ export class Game {
         break;
       default:
         if (action.startsWith("travel:")) {
+          this.leaveDrawnTrack();
           this.practice=undefined;this.ui.practiceName="";this.coins.root.visible=true;
           this.race.cancel();
           this.traffic.active = true;
@@ -613,6 +638,7 @@ export class Game {
   keys() {
     if (this.input.take("Escape")) {
       if (this.state === "drive") this.setState("pause");
+      else if(this.state==='tracks')void this.action('track-back');
       else if(this.state==='dev')void this.action('dev-close');
       else if(this.state==='multiplayer')void this.action('mp-back');
       else if (["pause", "map", "photo"].includes(this.state))
@@ -671,16 +697,42 @@ export class Game {
     if(this.foot.active){this.ui.toast('Enter the vehicle before recovery');return;}
     if(this.police.rules.impound>0){this.ui.toast('Wait for the traffic stop to finish');return;}
     this.autopilot.disable();this.police.recovered();
-    const success=this.race.active?this.race.recover(this.vehicle):recoverVehicle(this.vehicle);
+    const success=this.race.active||this.drawnWorld?this.race.recover(this.vehicle):recoverVehicle(this.vehicle);
     if(success){this.physicsClock.reset();this.syncCar(1);this.ui.toast(this.race.active&&!this.race.networkRace&&this.race.countdown<=0?'Returned to checkpoint · +3 seconds':'Back on the road');}
     else this.ui.toast('Recovery area blocked — try again when traffic clears');
   }
   private async startPractice(section:typeof PRACTICE_SECTIONS[number]){
     if(this.foot.active){this.foot.enter(this.vehicle,true);this.camera.stopFoot();}
-    this.practice=section;this.ui.practiceName=section.name;this.race.cancel();this.autopilot.disable();this.police.clearWanted();this.traffic.active=false;this.traffic.root.visible=false;
+    this.leaveDrawnTrack();this.practice=section;this.ui.practiceName=section.name;this.race.cancel();this.autopilot.disable();this.police.clearWanted();this.traffic.active=false;this.traffic.root.visible=false;
     for(const car of this.traffic.cars)car.body.setEnabled(false);
     this.vehicle.teleport(routeRoad(this.roads,section.route),section.distance);this.coins.root.visible=false;
     await this.prepareWorld();this.camera.setMode(0);this.setState('drive');this.ui.toast(`${section.name} · Practice`);
+  }
+  private activateDrawnTrack(track:DrawnTrack){
+    if(this.drawnWorld&&trackId(this.drawnWorld.track)===trackId(track))return;
+    this.drawnWorld?.dispose();this.drawnWorld=undefined;
+    try{this.drawnWorld=new DrawnTrackWorld(track,this.roads,this.physics);}catch(error){this.vehicle.teleport(this.roads.main,120);throw error;}this.render.scene.add(this.drawnWorld.root);
+    this.autopilot.disable();this.police.clearWanted();this.traffic.active=false;this.traffic.root.visible=false;
+    for(const car of this.traffic.cars)car.body.setEnabled(false);
+    this.vehicle.teleport(this.drawnWorld.road,24);this.playerContacts.clear();this.physicsClock.reset();this.syncCar(1);
+  }
+  private leaveDrawnTrack(){
+    if(!this.drawnWorld)return;
+    if(this.foot.active){this.foot.enter(this.vehicle,true);this.camera.stopFoot();}
+    this.drawnWorld.dispose();this.drawnWorld=undefined;this.selectedRoute="horizon";
+    this.vehicle.teleport(this.roads.main,120);this.syncCar(1);this.physicsClock.reset();
+  }
+  private async startDrawnRace(track:DrawnTrack,laps:number){
+    if(this.preparingWorld||this.network.connected||this.network.busy||this.network.raceLocked){this.ui.toast("Leave the multiplayer room before racing solo");return;}
+    if(this.police.active||this.police.rules.impound){this.ui.toast("Finish the pursuit before racing");return;}
+    const previous=this.state;
+    try{
+      if(this.foot.active){this.foot.enter(this.vehicle,true);this.camera.stopFoot();}
+      this.race.cancel();this.activateDrawnTrack(track);this.practice=undefined;this.ui.practiceName="";
+      this.race.best=this.trackEditor.store.best(track,raceCondition(this.save.settings),laps);
+      this.race.start(this.vehicle,laps,false,"custom",true);this.resultShown=false;
+      await this.prepareWorld();this.camera.setMode(0);this.setState("drive");this.ui.toast(`${track.name} · solo time trial`);
+    }catch(error){this.leaveDrawnTrack();this.race.cancel();this.traffic.active=true;this.setState(previous);this.ui.toast(error instanceof Error?error.message:"Track could not be loaded");}
   }
   private toggleFoot(){
     if(this.state!=="drive")return;
@@ -754,10 +806,10 @@ export class Game {
       }
       const navigation = {
         routeChoices:false,
-        orbs: this.boosts.pickups,
-        coins:this.coins.items,
-        limits:!this.dev.noPolice&&!this.race.active&&!this.race.finished?this.police.zones.zones:[],
-        cars: this.race.networkRace?[]:this.race.active ? this.race.ai.cars : this.traffic.active ? this.traffic.cars.filter(c => c.body.isEnabled()) : [],
+        orbs: this.drawnWorld?[]:this.boosts.pickups,
+        coins:this.drawnWorld?[]:this.coins.items,
+        limits:!this.drawnWorld&&!this.dev.noPolice&&!this.race.active&&!this.race.finished?this.police.zones.zones:[],
+        cars: this.race.networkRace?[]:this.race.active ? this.race.ai.cars : this.traffic.active ? this.enabledTraffic() : [],
       };
       const step = this.physicsClock.step;
       this.physicsClock.begin(elapsedFrame, performance.now());
@@ -772,8 +824,8 @@ export class Game {
           this.camera.mode===6?this.camera.freePosition:this.vehicle.position,
           this.vehicle.speed,
         );
-        navigation.cars=this.race.networkRace?[]:this.race.active?this.race.ai.cars:this.traffic.active?this.traffic.cars.filter(c=>c.body.isEnabled()):[];
-        this.police.preStep(step,this.vehicle,this.race.active||this.race.finished||!!this.practice,this.traffic.active?navigation.cars:[]);
+        navigation.cars=this.race.networkRace?[]:this.race.active?this.race.ai.cars:this.traffic.active?this.enabledTraffic():[];
+        this.police.preStep(step,this.vehicle,this.race.active||this.race.finished||!!this.practice||!!this.drawnWorld,this.traffic.active?navigation.cars:[]);
         if(this.rollingLaunch&&this.race.networkRace&&this.race.countdown<=0){this.rollingLaunch=false;this.vehicle.body.setLinvel({x:this.vehicle.forward.x*15,y:this.vehicle.forward.y*15,z:this.vehicle.forward.z*15},true);}
         const input =
           this.police.rules.impound>0 ||
@@ -781,43 +833,43 @@ export class Game {
             ? stopped
             : this.autopilot.enabled ? this.autopilot.controls(this.vehicle, Math.min(this.save.settings.autopilotSpeed,this.police.limit?this.police.limit-2:Infinity), this.save.settings.autopilotMode, controls, navigation, step) : controls;
         this.slipstream.update(step,this.vehicle,input,this.race.networkRace?noTraffic:this.race.active?this.race.ai.cars:this.traffic.active?this.traffic.cars:noTraffic,this.remotes,now);
-        if(this.race.active&&this.race.countdown<=0&&this.autopilot.enabled)this.race.assistUsed=true;
+        if(this.race.active&&this.race.countdown<=0&&this.autopilot.enabled){this.race.assistUsed=true;this.race.allAssisted=true;}
         this.vehicle.preStep(input, step);
         this.race.update(step, this.vehicle);
         if(this.race.lapSerial!==this.recordedLapSerial){
           this.recordedLapSerial=this.race.lapSerial;
-          this.save.recordLap(this.race.lastLapTime,this.save.selectedCar,this.race.lastLapNumber,this.race.lastLapAssisted,this.race.networkRace,this.race.condition);
+          if(!this.drawnWorld)this.save.recordLap(this.race.lastLapTime,this.save.selectedCar,this.race.lastLapNumber,this.race.lastLapAssisted,this.race.networkRace,this.race.condition);
         }
         this.playerContacts.update(now-this.physicsClock.accumulator*1000,this.network.connected&&!this.network.ghost,this.remotes);
         this.physics.world.step(undefined,this.playerContacts.hooks);
         this.vehicle.postStep(this.physicsClock.step);
         this.police.postStep(step);
-        if(!this.practice&&!(this.race.active&&this.race.countdown>0)&&!this.race.finished&&this.police.rules.impound===0)this.save.recordDriving(step,this.vehicle.speed*3.6,this.vehicle.contacts>0&&this.vehicle.crashCooldown===0);
+        if(!this.drawnWorld&&!this.practice&&!(this.race.active&&this.race.countdown>0)&&!this.race.finished&&this.police.rules.impound===0)this.save.recordDriving(step,this.vehicle.speed*3.6,this.vehicle.contacts>0&&this.vehicle.crashCooldown===0);
         if(!this.race.networkRace)(this.race.active?this.race.ai:this.traffic).collisions(this.vehicle);
         if(this.police.messageSerial!==this.lastPoliceMessage) {
           this.lastPoliceMessage=this.police.messageSerial;this.ui.toast(this.police.message,2);this.ui.economy();
           if(this.police.rules.impound)this.autopilot.disable();
         }
-        const mileageReward=this.rewards.update(step,this.vehicle,!this.practice&&this.police.rules.impound===0&&!(this.race.active&&this.race.countdown>0)&&!this.race.finished);
+        const mileageReward=this.rewards.update(step,this.vehicle,!this.drawnWorld&&!this.practice&&this.police.rules.impound===0&&!(this.race.active&&this.race.countdown>0)&&!this.race.finished);
         if(mileageReward){this.audio.coin();this.ui.reward(mileageReward);}
         if(this.vehicle.crashSerial!==this.lastCrash) {
           this.lastCrash=this.vehicle.crashSerial;
           this.particles.explode(this.vehicle.position,this.vehicle.crashSeverity);
           this.audio.explosion(this.vehicle.crashSeverity,this.vehicle.impactSide);this.finishes.get(this.car)?.impact(this.vehicle,this.vehicle.crashSeverity);
         }
-        if(!this.practice&&this.police.rules.impound===0 && !(this.race.active&&this.race.countdown>0)) {
+        if(!this.drawnWorld&&!this.practice&&this.police.rules.impound===0 && !(this.race.active&&this.race.countdown>0)) {
           const amount=this.coins.collect(this.vehicle);
           if(amount){this.audio.coin();this.ui.economy();this.ui.reward(amount);}
         }
-        if (this.police.rules.impound===0 && !(this.race.active && this.race.countdown > 0))
+        if (!this.drawnWorld&&this.police.rules.impound===0 && !(this.race.active && this.race.countdown > 0))
           this.boosts.update(step, this.vehicle);
         this.physicsMs+=performance.now()-stepStart;
       }
-      this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);
+      if(!this.drawnWorld)this.world.update(this.vehicle.position,false,this.camera.mode===6?this.camera.freePosition:this.vehicle.position);
       if (
         this.vehicle.position.y < -8
       )
-      { this.police.recovered();this.vehicle.reset(); }
+      { this.police.recovered();if(this.drawnWorld){this.race.recover(this.vehicle);}else this.vehicle.reset(); }
       if (this.save.settings.cycle)
         this.save.settings.hour = (this.save.settings.hour + dt / 90) % 24;
       this.saveClock += dt;
@@ -829,7 +881,8 @@ export class Game {
         this.resultShown = true;
         this.save.statistics.racesCompleted++;
         this.save.coins+=this.race.claimReward();
-        if(!this.race.networkRace){this.save.recordRoute(this.race.routeId,this.race.resultTime,this.race.condition);if(this.race.route.closed){if(this.race.condition==="wet")this.save.wetBestByLaps[this.race.laps]=this.race.best;else {this.save.bestByLaps[this.race.laps]=this.race.best;if(this.race.laps===1)this.save.best=this.race.best;}}}
+        if(this.drawnWorld&&!this.race.networkRace&&!this.race.allAssisted){try{this.trackEditor.store.record(this.drawnWorld.track,this.race.resultTime,this.race.condition,this.race.laps);}catch{this.ui.toast("Track time could not be saved");}}
+        if(!this.drawnWorld&&!this.race.networkRace){this.save.recordRoute(this.race.routeId,this.race.resultTime,this.race.condition);if(this.race.route.closed){if(this.race.condition==="wet")this.save.wetBestByLaps[this.race.laps]=this.race.best;else {this.save.bestByLaps[this.race.laps]=this.race.best;if(this.race.laps===1)this.save.best=this.race.best;}}}
         this.persist();
         this.ui.showResults(this.race);
         this.setState("results");
@@ -844,7 +897,7 @@ export class Game {
         this.foot.preStep(walk,this.camera.orbitYaw,step);
         const stepStart=performance.now();this.physics.world.step();this.physicsMs+=performance.now()-stepStart;this.foot.postStep();
       }
-      this.world.update(this.foot.position,false,this.foot.position);
+      if(!this.drawnWorld)this.world.update(this.foot.position,false,this.foot.position);
     }
     this.coins.animate(driving?dt:0,this.vehicle.position);
     // One render phase: finalized physics -> interpolated vehicle -> camera -> draw.
@@ -914,6 +967,7 @@ export class Game {
   }
   persist(checkpoint=false) {
     if (!this.vehicle) return;
+    if(this.drawnWorld){this.save.save();return;}
     this.save.savePosition(this.vehicle,checkpoint);
   }
   updateNetwork(now:number,dt:number) {

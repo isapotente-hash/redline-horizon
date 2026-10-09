@@ -30,8 +30,8 @@ export class MultiplayerPanel {
     this.selections=['mp-route','mp-laps','mp-class','mp-rule','mp-weather'].map(id=>get(id) as HTMLSelectElement);
     for(const select of this.selections)select.addEventListener('change',()=>{
       const [route,laps,category,start,weather]=this.selections;
-      const settings:RaceSettings={route:route.value as RaceSettings['route'],laps:route.value==='horizon'&&laps.value==='3'?3:1,vehicleClass:category.value as RaceSettings['vehicleClass'],startRule:start.value as RaceSettings['startRule'],weather:weather.value as RaceSettings['weather']};
-      this.network.setRaceSettings(settings);this.refresh();
+      const settings:RaceSettings={route:route.value as RaceSettings['route'],laps:(route.value==='horizon'||route.value==='custom')&&laps.value==='3'?3:1,vehicleClass:category.value as RaceSettings['vehicleClass'],startRule:start.value as RaceSettings['startRule'],weather:weather.value as RaceSettings['weather']};
+      if(settings.route==="custom")settings.track=this.network.raceSettings.track;this.network.setRaceSettings(settings);this.refresh();
     });
     this.roster=get('mp-roster'); this.status=get('mp-status'); this.code=get('mp-code'); this.hud=get('mp-hud');
     this.host=get('mp-host') as HTMLButtonElement; this.join=get('mp-join') as HTMLButtonElement;
@@ -58,8 +58,10 @@ export class MultiplayerPanel {
     this.start.hidden=!n.connected||!n.host;
     this.start.disabled=n.pendingRace||n.raceLocked||!n.raceReady;
     this.start.textContent=n.session?'REMATCH':'START RACE';
+    let custom=this.selections[0].querySelector<HTMLOptionElement>('option[value=custom]');
+    if(n.raceSettings.route==='custom'){if(!custom){custom=document.createElement('option');custom.value='custom';this.selections[0].append(custom);}custom.textContent=`Drawn: ${n.raceSettings.track?.name||'Custom track'}`;}else custom?.remove();
     const values=[n.raceSettings.route,String(n.raceSettings.laps),n.raceSettings.vehicleClass,n.raceSettings.startRule,n.raceSettings.weather||"clear"];
-    this.selections.forEach((select,i)=>{select.value=values[i];select.disabled=n.busy||n.pendingRace||n.raceLocked||(!!n.code&&!n.host)||(i===1&&n.raceSettings.route!=='horizon');});
+    this.selections.forEach((select,i)=>{select.value=values[i];select.disabled=n.busy||n.pendingRace||n.raceLocked||(!!n.code&&!n.host)||(i===1&&n.raceSettings.route!=='horizon'&&n.raceSettings.route!=='custom');});
     this.readyButton.hidden=!n.connected;this.readyButton.disabled=n.pendingRace||n.raceLocked||!matchesClass(carSpec(n.localCar),n.raceSettings.vehicleClass);
     this.readyButton.textContent=!matchesClass(carSpec(n.localCar),n.raceSettings.vehicleClass)?'CHANGE VEHICLE':n.localReady?'READY ✓':'READY UP';
     this.readyButton.setAttribute('aria-pressed',String(n.localReady));
