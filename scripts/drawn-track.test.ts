@@ -22,6 +22,29 @@ test('track input rejects crossings, nonfinite coordinates, undersized loops and
  assert.throws(()=>makeDrawnTrack([[.1,.1],[.2,.2]],'Bad'));
  assert.throws(()=>buildDrawnRoad({...t,width:Infinity}));
 });
+test('a dense finger stroke can close slightly past its start and survive save/play unchanged',()=>{
+ for(const n of [120,200,500]){
+  const raw:TrackPoint[]=Array.from({length:n+Math.floor(n*.035)},(_,i)=>{const a=i/n*Math.PI*2;return [.5+Math.sin(a)*.3,.5+Math.cos(a)*.31];});
+  const t=makeDrawnTrack(raw,'Finger circuit');assert.ok(validDrawnTrack(t));assert.ok(t.points.length<=96);assert.ok(buildDrawnRoad(t).length>3500);
+  for(let i=0;i<5;i++){const played=makeDrawnTrack(t.points,t.name,t.width);assert.deepEqual(played,t);assert.equal(trackId(played),trackId(t));}
+ }
+});
+test('closing tolerance does not accept a figure eight or an extra partial lap',()=>{
+ const crossed:TrackPoint[]=Array.from({length:201},(_,i)=>{const a=i/200*Math.PI*2;return [.5+Math.sin(a)*.32,.5+Math.sin(2*a)*.3];});
+ assert.throws(()=>makeDrawnTrack(crossed),/crossing|overlap/);
+ const overrun:TrackPoint[]=Array.from({length:231},(_,i)=>{const a=i/200*Math.PI*2;return [.5+Math.sin(a)*.3,.5+Math.cos(a)*.31];});
+ assert.throws(()=>makeDrawnTrack(overrun),/crossing|overlap/);
+ assert.throws(()=>makeDrawnTrack([...points(),[NaN,.5]]),/inside/);
+});
+test('storage failure rolls back track edits and records while the in-memory course can still race',()=>{
+ let data='';Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:()=>data,setItem:(_k:string,v:string)=>data=v}});
+ const store=new TrackStore(),t=course();store.save(t);
+ Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:()=>data,setItem:()=>{throw new Error('Quota exceeded');}}});
+ assert.throws(()=>store.save({...t,name:'Unstored edit'}));assert.equal(store.tracks[0].name,t.name);
+ assert.throws(()=>store.remove(trackId(t)));assert.equal(store.tracks.length,1);
+ assert.throws(()=>store.record(t,80,'dry'));assert.equal(store.best(t,'dry'),0);
+ assert.ok(buildDrawnRoad(makeDrawnTrack(store.tracks[0].points)).length>3500);
+});
 test('drawn track saving, deletion, lap counts and wet/dry records remain separate and survive reload',()=>{
  let data='';Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:()=>data,setItem:(_k:string,v:string)=>data=v}});
  const store=new TrackStore(),t=course();store.save(t);store.save({...t,name:'Renamed'});assert.equal(store.tracks.length,1);store.record(t,80,'dry');store.record(t,90,'dry');store.record(t,240,'dry',3);store.record(t,95,'wet');const again=new TrackStore();assert.equal(again.best(t,'dry'),80);assert.equal(again.best(t,'dry',3),240);assert.equal(again.best(t,'wet'),95);again.remove(trackId(t));assert.equal(new TrackStore().tracks.length,0);

@@ -140,11 +140,12 @@ export class Game {
       this.ui.economyKey="";this.ui.sync();
     };
     this.dev.onReset=()=>{this.police.clearWanted();this.vehicle.reset();this.syncCar(1);};
-    this.trackEditor.onSolo=(track,laps)=>void this.startDrawnRace(track,laps);
+    this.trackEditor.onSolo=(track,laps)=>this.startDrawnRace(track,laps);
     this.trackEditor.onMultiplayer=(track,laps)=>{
-      if(this.network.pendingRace||this.network.raceLocked){this.ui.toast("Finish the shared race before changing tracks");return;}
-      if(this.network.code&&!this.network.host){this.ui.toast("The host chooses the course. Leave the room to host your own.");return;}
+      if(this.network.pendingRace||this.network.raceLocked){this.trackEditor.reportError("Finish the shared race before changing tracks");return;}
+      if(this.network.code&&!this.network.host){this.trackEditor.reportError("The host chooses the course. Leave the room to host your own.");return;}
       if(this.network.setRaceSettings({...this.network.raceSettings,route:"custom",track,laps:laps===3?3:1})){this.multiplayerPrevious="tracks";this.setState("multiplayer");this.ui.toast("Host a room or ready up — your course will be shared automatically");}
+      else this.trackEditor.reportError("Wait for the room to connect before changing tracks.");
     };
     this.network.setName(this.save.settings.driverName);
     this.ui.onSetup=(key,value)=>{this.save.setSetup(key,value);this.vehicle.applyLoadout(this.save.loadout,this.save.setup);};
@@ -163,7 +164,11 @@ export class Game {
       this.playerContacts?.clear();
       this.remotes.forEach(remote=>remote.reset());
       if(this.multiplayerPrevious==='results')this.multiplayerPrevious='drive';
-      if(this.race?.networkRace){this.race.cancel();this.leaveDrawnTrack();this.traffic.active=true;if(this.state==='results')this.setState('drive');}
+      if(this.race?.networkRace||(this.drawnWorld&&!this.race.solo)){
+        this.race.cancel();this.leaveDrawnTrack();this.traffic.active=true;
+        // Arena teardown also needs to restore scene visibility in drive/pause/lobby.
+        this.setState(this.state==='results'?'drive':this.state);
+      }
       this.ui.toast('Room closed');
     };
     this.network.onPose=(pose,slot)=>{
@@ -425,7 +430,7 @@ export class Game {
     if (!this.running||!this.vehicle||this.preparingWorld) return;
     if(action==='track-editor'){
       if(this.police.active||this.police.rules.impound||this.network.pendingRace||this.network.raceLocked){this.ui.toast("Finish the pursuit or shared race before drawing a track");return;}
-      this.tracksPrevious=this.state;this.setState("tracks");this.trackEditor.renderSaved();return;
+      this.tracksPrevious=this.state;this.setState("tracks");this.trackEditor.refresh();return;
     }
     if(action==='track-back'){this.setState(this.tracksPrevious);return;}
     if(action.startsWith('route:')){if(this.state==='drive'&&this.autopilot.enabled&&this.save.settings.autopilotMode!=='speed'&&this.autopilot.routes.choice?.visible&&this.autopilot.routes.select(Number(action.slice(6)))){this.ui.routeChoice(undefined);this.routeVisible=false;}return;}
@@ -723,8 +728,8 @@ export class Game {
     this.vehicle.teleport(this.roads.main,120);this.syncCar(1);this.physicsClock.reset();
   }
   private async startDrawnRace(track:DrawnTrack,laps:number){
-    if(this.preparingWorld||this.network.connected||this.network.busy||this.network.raceLocked){this.ui.toast("Leave the multiplayer room before racing solo");return;}
-    if(this.police.active||this.police.rules.impound){this.ui.toast("Finish the pursuit before racing");return;}
+    if(this.preparingWorld||this.network.connected||this.network.busy||this.network.raceLocked){this.trackEditor.reportError("Leave the multiplayer room before racing solo");return;}
+    if(this.police.active||this.police.rules.impound){this.trackEditor.reportError("Finish the pursuit before racing");return;}
     const previous=this.state;
     try{
       if(this.foot.active){this.foot.enter(this.vehicle,true);this.camera.stopFoot();}
@@ -732,7 +737,7 @@ export class Game {
       this.race.best=this.trackEditor.store.best(track,raceCondition(this.save.settings),laps);
       this.race.start(this.vehicle,laps,false,"custom",true);this.resultShown=false;
       await this.prepareWorld();this.camera.setMode(0);this.setState("drive");this.ui.toast(`${track.name} · solo time trial`);
-    }catch(error){this.leaveDrawnTrack();this.race.cancel();this.traffic.active=true;this.setState(previous);this.ui.toast(error instanceof Error?error.message:"Track could not be loaded");}
+    }catch(error){this.leaveDrawnTrack();this.race.cancel();this.traffic.active=true;this.setState(previous);this.trackEditor.reportError(error instanceof Error?error.message:"Track could not be loaded");}
   }
   private toggleFoot(){
     if(this.state!=="drive")return;

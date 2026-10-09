@@ -1733,6 +1733,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 .track-editor-layout{display:grid;grid-template-columns:minmax(240px,1fr) 270px;gap:24px}
 #track-drawing{display:block;width:100%;aspect-ratio:1;height:auto;touch-action:none;border:1px solid #36565c;border-radius:12px;cursor:crosshair}
 .track-tools{display:flex;gap:8px;margin-top:12px}.track-tools button{flex:1}
+#track-message[data-error=true]{color:#ffb9ad}
 #track-message{min-height:2.6em;font-size:13px;color:#a5e8d7}
 .track-editor-layout aside label{display:flex;flex-direction:column;gap:7px;margin-bottom:18px}
 .track-editor-layout input:not([type=range]),.track-editor-layout select{width:100%;background:#17272c;color:#eef5f2;border:1px solid #3b565b;padding:12px;border-radius:7px}
