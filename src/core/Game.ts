@@ -980,7 +980,7 @@ export class Game {
     if(!this.network.connected||this.preparingWorld)return;
     this.networkClock+=dt;if(this.networkClock<.05)return;this.networkClock%=.05;
     const p=this.outgoing,v=this.vehicle;
-    p.seq=++this.networkSequence;p.car=this.save.car.id;p.paint=this.save.settings.paint;p.active=visible;p.occupied=!this.foot.active;
+    p.sentAt=now;p.seq=++this.networkSequence;p.car=this.save.car.id;p.paint=this.save.settings.paint;p.active=visible;p.occupied=!this.foot.active;
     p.p[0]=v.position.x;p.p[1]=v.position.y;p.p[2]=v.position.z;
     p.q[0]=v.rotation.x;p.q[1]=v.rotation.y;p.q[2]=v.rotation.z;p.q[3]=v.rotation.w;
     p.steer=v.steering;p.spin=v.wheelSpin;p.lean=v.lean;p.pitch=v.pitch;p.brake=v.braking;

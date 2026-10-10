@@ -24,7 +24,7 @@ export class RaceManager {
     for(const slot of slots)if(slot!==local)this.opponents.set(slot,{progress:0,finished:false,time:0,connected:true});
   }
   updateOpponent(slot:number,progress:number,finished:boolean,time:number){
-    const opponent=this.opponents.get(slot);if(!opponent)return;
+    const opponent=this.opponents.get(slot);if(!opponent||opponent.finished)return;
     Object.assign(opponent,{progress,finished,time});this.rankNetwork();
   }
   updateRoster(slots:number[]){

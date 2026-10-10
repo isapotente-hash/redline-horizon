@@ -1,3 +1,4 @@
+import {PoseTimeline} from './PoseTimeline';
 import * as T from 'three';
 import { CarVisual, makeCar } from '../vehicles/CarModel';
 import { CARS, chassisFor, isBike } from '../vehicles/CarCatalog';
@@ -10,11 +11,9 @@ export class RemoteVehicle {
   root = new T.Group();
   private models = new Map<string, CarVisual>();
   private visual?: CarVisual;
-  private queue: { pose: Pose; at: number }[] = [];
+  private timeline=new PoseTimeline();
   private position = new T.Vector3();
   private rotation = new T.Quaternion();
-  private target = new T.Vector3();
-  private targetRotation = new T.Quaternion();
   private marker: T.Mesh;
   latest?: Pose;
   speed=0;receivedAt=-Infinity;
@@ -25,14 +24,8 @@ export class RemoteVehicle {
     this.root.add(this.marker);
   }
   receive(pose: Pose, now = performance.now()) {
-    this.latest = pose;
-    const previous = this.queue[this.queue.length-1];
-    const delta=previous?Math.hypot(pose.p[0]-previous.pose.p[0],pose.p[2]-previous.pose.p[2]):0,seconds=previous?(now-previous.at)/1000:0;
-    this.speed=previous&&seconds>0&&seconds<=.5&&delta<=80&&previous.pose.car===pose.car?T.MathUtils.clamp(delta/seconds,0,140):0;
-    this.receivedAt=now;
-    if (previous && (previous.pose.car !== pose.car || delta*delta+(pose.p[1]-previous.pose.p[1])**2 > 6400)) this.queue.length = 0;
-    this.queue.push({pose, at:now});
-    if (this.queue.length > 8) this.queue.shift();
+    if(!this.timeline.receive(pose,now))return;
+    this.latest = pose;this.speed=this.timeline.speed;this.receivedAt=now;
     if (!this.models.has(pose.car)) {
       const spec = CARS.find(c=>c.id===pose.car)!;
       const car = isBike(spec) || spec.kit==='pickup' || spec.kit==='roadster' || spec.kit==='supercar' ? makeVehicle(spec) : makeCar(false);
@@ -46,20 +39,21 @@ export class RemoteVehicle {
     this.visual.paint.color.set(pose.paint);
   }
   update(now: number, visible: boolean, local: T.Vector3) {
-    const latest = this.latest, car = this.visual, q = this.queue;
-    this.root.visible = !!(visible && latest?.active && car && q.length && now-q[q.length-1].at < 5000);
+    const latest = this.latest, car = this.visual;
+    this.root.visible = !!(visible && latest?.active && car && now-this.receivedAt < 5000);
     if (!this.root.visible || !car || !latest) return;
     this.sample(now,this.position,this.rotation);
-    const a=q[0], b=q[1]||a, alpha=a===b?1:T.MathUtils.clamp((now-100-a.at)/Math.max(1,b.at-a.at),0,1);
+    this.timeline.visualAt(now);
+    const a=this.timeline.visualA!,b=this.timeline.visualB!,alpha=this.timeline.visualAlpha;
     this.root.position.copy(this.position); this.root.quaternion.copy(this.rotation);
     const spec=CARS.find(c=>c.id===latest.car)!;
-    if(isBike(spec)) this.root.rotateZ(T.MathUtils.lerp(a.pose.lean,b.pose.lean,alpha));
+    if(isBike(spec)) this.root.rotateZ(T.MathUtils.lerp(a.lean,b.lean,alpha));
     car.body.position.y=-(chassisFor(spec).radius+.18);
-    car.body.rotation.x=T.MathUtils.lerp(a.pose.pitch,b.pose.pitch,alpha);
+    car.body.rotation.x=T.MathUtils.lerp(a.pitch,b.pitch,alpha);
     for(let i=0;i<4;i++) {
       car.steers[i].position.y=-.23;
-      car.steers[i].rotation.y=i<2?T.MathUtils.lerp(a.pose.steer,b.pose.steer,alpha):0;
-      car.wheels[i].rotation.x=T.MathUtils.lerp(a.pose.spin,b.pose.spin,alpha);
+      car.steers[i].rotation.y=i<2?T.MathUtils.lerp(a.steer,b.steer,alpha):0;
+      car.wheels[i].rotation.x=T.MathUtils.lerp(a.spin,b.spin,alpha);
     }
     if(car.occupant)car.occupant.visible=latest.occupied!==false;
     car.brake.emissiveIntensity=latest.brake>.1?4:.6;
@@ -68,13 +62,7 @@ export class RemoteVehicle {
   }
   /** Same timeline for wheel visuals and solid peer proxies; stale peers cannot block the road. */
   sample(now:number,position:T.Vector3,rotation:T.Quaternion,maxAge=5000) {
-    const q=this.queue;if(!this.latest?.active||!q.length||now-q[q.length-1].at>maxAge)return false;
-    const renderTime = now-100;
-    while (q.length > 2 && q[1].at < renderTime) q.shift();
-    const a=q[0], b=q[1]||a, alpha=a===b?1:T.MathUtils.clamp((renderTime-a.at)/Math.max(1,b.at-a.at),0,1);
-    position.fromArray(a.pose.p); this.target.fromArray(b.pose.p); position.lerp(this.target,alpha);
-    rotation.fromArray(a.pose.q).normalize(); this.targetRotation.fromArray(b.pose.q).normalize(); rotation.slerp(this.targetRotation,alpha);
-    return true;
+    return this.timeline.sample(now,position,rotation,maxAge);
   }
-  reset() { this.root.visible=false; this.queue.length=0; this.latest=undefined;this.speed=0;this.receivedAt=-Infinity; }
+  reset() { this.root.visible=false; this.timeline.reset(); this.latest=undefined;this.speed=0;this.receivedAt=-Infinity; }
 }

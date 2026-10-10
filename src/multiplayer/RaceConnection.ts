@@ -1,3 +1,4 @@
+import {MovementChannel} from './MovementChannel';
 import {cleanName} from './Invites';
 import {CARS,carSpec} from "../vehicles/CarCatalog";
 import {RaceSettings,defaultRaceSettings,validRaceSettings,matchesClass} from "./LobbySettings";
@@ -7,6 +8,7 @@ type Handler = (...args: any[]) => void;
 export interface DataLink {
   open: boolean; peer: string; bufferSize: number; metadata?: any;
   dataChannel?: { bufferedAmount: number };
+  peerConnection?: RTCPeerConnection;
   on(event: string, fn: Handler): void; send(data: unknown): void; close(): void;
 }
 export interface PeerClient {
@@ -36,7 +38,7 @@ export function loadPeerJS(): Promise<PeerFactory> {
 }
 
 
-type Member = {link:DataLink; slot:number; ready:boolean; seen:number; deadline:number; seq:number; clock:boolean; latency:number};
+type Member = {movement?:MovementChannel; link:DataLink; slot:number; ready:boolean; seen:number; deadline:number; seq:number; clock:boolean; latency:number};
 type Proposal = {id:string; settings:RaceSettings; laps:number; expires:number; slots:number[]; ready:Set<number>};
 
 /** Host-relayed star: up to four guests, no separate gameplay server. */
@@ -92,8 +94,9 @@ export class RaceConnection {
   private lastSeq=new Map<number,number>();
   private finishedSlots=new Set<number>();
   private startSerial=0;
+  private finishSentRace='';
   get playerCount(){return this.players.length;}
-  get ready(){return this.connected&&!this.busy&&Array.from(this.members.values()).every(m=>m.ready&&m.clock);}
+  get ready(){return this.connected&&!this.busy&&Array.from(this.members.values()).every(m=>m.ready&&m.clock&&m.movement?.ready);}
   constructor(private loader=loadPeerJS,private now=Date.now){}
   private change(message:string){this.status=message;this.onChange();}
   async open(host:boolean,rawCode=''){
@@ -146,13 +149,19 @@ export class RaceConnection {
     const member:Member={link,slot,ready:false,seen:this.now(),deadline:this.now()+20000,seq:-1,clock:false,latency:0};
     this.members.set(link,member);
     const current=()=>epoch===this.epoch&&this.members.get(link)===member;
-    const hello=()=>{if(current())this.transmit(member,{t:'hello',protocol:PROTOCOL,host:this.host});};
+    if(link.peerConnection)member.movement=new MovementChannel(link.peerConnection,this.host,data=>{
+      if(current()&&member.ready&&data&&typeof data==='object')this.receive(member,data,true);
+    },()=>{if(current())this.onChange();});
+    const hello=()=>{if(current()){member.movement?.start();this.transmit(member,{t:'hello',protocol:PROTOCOL,host:this.host});}};
     link.on('open',hello);if(link.open)hello();
     link.on('data',(data:any)=>{if(current()&&data&&typeof data==='object')this.receive(member,data);});
     link.on('close',()=>{if(current())this.drop(member,'A driver disconnected. The remaining players can continue.');});
     link.on('error',()=>{if(current())this.drop(member,'A peer connection failed. Other drivers remain connected.');});
   }
-  private receive(m:Member,data:any){
+  private receive(m:Member,data:any,movement=false){
+    // Movement channels cannot issue room commands or race results.
+    if(movement&&!((this.host&&validPose(data))||(!this.host&&data.t==='pose'&&validPose(data.pose))))return;
+    if(!movement&&(validPose(data)||data.t==='pose'))return;
     if(data.t==='reject'&&!this.connected){
       this.fail(data.reason==='full'?'Room full · maximum five players.':data.reason==='racing'?'Race in progress. Join after everyone finishes.':'Use the same five-player Multiplayer edition on every device.');return;
     }
@@ -199,6 +208,15 @@ export class RaceConnection {
       if(!this.host){const offset=data.now-(data.at+this.now())/2;this.clockOffset=this.clockReady?this.clockOffset*.7+offset*.3:offset;this.clockReady=true;}
       this.onChange();return;
     }
+    if(data.t==='finish'&&validPose(data.pose)&&data.pose.finished&&data.pose.race===this.session&&!!this.session){
+      const slot=this.host?m.slot:data.slot;
+      if(validSlot(slot)&&slot!==this.slot&&this.players.includes(slot)&&!this.finishedSlots.has(slot)){
+        this.finishedSlots.add(slot);this.onPose(data.pose,slot);
+        if(this.host)this.broadcast({t:'finish',slot,pose:data.pose},false,m);
+        this.checkFinished();
+      }
+      return;
+    }
     if(this.host&&validPose(data)){
       if(data.seq<=m.seq)return;
       m.seq=data.seq;m.seen=this.now();this.acceptPose(data,m.slot);
@@ -227,8 +245,7 @@ export class RaceConnection {
     }
   }
   private acceptPose(pose:Pose,slot:number){
-    if(pose.race===this.session&&pose.finished)this.finishedSlots.add(slot);
-    this.onPose(pose,slot);this.checkFinished();
+    this.onPose(pose,slot);
   }
   private checkFinished(){
     if(this.host&&this.raceLocked&&this.racers.every(slot=>!this.players.includes(slot)||this.finishedSlots.has(slot))){
@@ -278,7 +295,7 @@ export class RaceConnection {
     else this.cancelStart('A driver lost connection. Please try again.');
   }
   private start(id:string,at:number,laps:number,slots:number[],settings:RaceSettings){
-    this.session=id;this.racers=[...slots];this.finishedSlots.clear();this.raceLocked=true;this.proposal=undefined;this.pendingRace=false;
+    this.finishSentRace='';this.session=id;this.racers=[...slots];this.finishedSlots.clear();this.raceLocked=true;this.proposal=undefined;this.pendingRace=false;
     this.change(`Connected · ${slots.length}-player race · ${this.ghost?'ghost mode':'player contact on'}.`);this.onStart(id,at,laps,settings);
   }
   private cancelStart(message:string){
@@ -290,12 +307,13 @@ export class RaceConnection {
     if(this.deadline&&now>this.deadline){this.fail('Connection timed out. Check the code and internet; this network may block WebRTC.');return;}
     for(const m of this.members.values()){
       if((m.deadline&&now>m.deadline)||(m.ready&&now-m.seen>20000)){this.drop(m,'Connection timed out. Other drivers can continue.');continue;}
-      if(m.ready)this.transmit(m,{t:'ping',at:now});
+      if(m.ready){m.movement?.start();this.transmit(m,{t:'ping',at:now});}
     }
     if(this.proposal&&now>this.proposal.expires)this.cancelStart('Race start timed out. The host can try again.');
   }
   private transmit(m:Member,data:unknown,state=false){
-    if(!m.link.open||(state&&(m.link.bufferSize>0||(m.link.dataChannel?.bufferedAmount||0)>32768)))return false;
+    if(!m.link.open)return false;
+    if(state)return m.movement?.send(data)??false;
     try{m.link.send(data);return true;}catch{this.drop(m,'A driver lost connection. Other players can continue.');return false;}
   }
   private broadcast(data:unknown,state=false,except?:Member){
@@ -305,6 +323,11 @@ export class RaceConnection {
   }
   send(data:unknown,state=false):boolean{
     if(!this.connected)return false;
+    if(state&&validPose(data)&&data.finished&&data.race===this.session&&this.finishSentRace!==this.session){
+      const result={t:'finish',slot:this.slot,pose:data};
+      const member=this.members.values().next().value;
+      if(this.host?this.broadcast(result):!!member&&this.transmit(member,result))this.finishSentRace=this.session;
+    }
     if(this.host){
       if(state&&validPose(data)){if(data.race===this.session&&data.finished)this.finishedSlots.add(0);this.checkFinished();return this.broadcast({t:'pose',slot:0,pose:data},true);}
       return false;
@@ -315,7 +338,7 @@ export class RaceConnection {
   private drop(m:Member,message:string){
     if(!this.members.has(m.link))return;
     if(!this.host){this.fail(message+' Reconnect using the room code.');return;}
-    this.members.delete(m.link);try{m.link.close();}catch{}
+    this.members.delete(m.link);m.movement?.close();try{m.link.close();}catch{}
     if(this.proposal)this.cancelStart('A driver left before the start. Try again with the remaining drivers.');
     this.updateHostRoster();this.change(message);
   }
@@ -324,9 +347,9 @@ export class RaceConnection {
     const hadConnection=this.connected;this.epoch++;clearInterval(this.timer);this.timer=undefined;
     const members=Array.from(this.members.values()),peer=this.peer;this.members.clear();this.peer=undefined;
     this.connected=false;this.busy=false;this.ghost=true;this.host=false;this.code='';this.session='';this.pendingRace=false;this.raceLocked=false;
-    this.proposal=undefined;this.settingsVersion=0;this.raceSettings=defaultRaceSettings();this.drivers.clear();this.drivers.set(0,{ready:true,car:this.localCar,name:this.localName,latency:0});this.players=[0];this.racers=[];this.slot=0;this.finishedSlots.clear();this.lastSeq.clear();
+    this.proposal=undefined;this.settingsVersion=0;this.raceSettings=defaultRaceSettings();this.drivers.clear();this.drivers.set(0,{ready:true,car:this.localCar,name:this.localName,latency:0});this.players=[0];this.racers=[];this.slot=0;this.finishedSlots.clear();this.lastSeq.clear();this.finishSentRace='';
     this.clockReady=false;this.clockOffset=0;this.latency=0;this.deadline=0;
-    for(const m of members)try{m.link.close();}catch{}try{peer?.destroy();}catch{}
+    for(const m of members)try{m.movement?.close();m.link.close();}catch{}try{peer?.destroy();}catch{}
     this.onRoster(this.players);if(hadConnection)this.onDisconnected();
     if(notify)this.change('Room closed. Single-player driving is ready.');
   }
