@@ -1,4 +1,5 @@
 import {importedVehicle} from './ImportedVehicles';
+import {batchStaticParts} from '../rendering/StaticScene';
 import * as T from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {CarVisual,makeCar,addHeadlights} from './CarModel';
@@ -34,7 +35,7 @@ export function makeVehicle(spec:CarSpec):CarVisual {
   car.steering.add(new T.Mesh(new T.TorusGeometry(.16,.025,8,24),black));
   const chassis=chassisFor(spec);
   for(let i=0;i<4;i++){car.steers[i].position.set((i%2?1:-1)*chassis.halfWidth,chassis.radius,i<2?-chassis.halfLength:chassis.halfLength);car.wheels[i].scale.setScalar(chassis.radius/.365);}
-  car.root.name=spec.name;addHeadlights(car);return car;
+  batchStaticParts(car.root);car.root.name=spec.name;addHeadlights(car);return car;
 }
 
 export function makeMotorbike(spec:CarSpec):CarVisual {
@@ -85,6 +86,7 @@ export function makeMotorbike(spec:CarSpec):CarVisual {
     link([side*.19,1.04,.35],[side*.31,.75,-.07],.095,suit);link([side*.31,.75,-.07],[side*.26,.43,.34],.074,suit);box(.14,.12,.29,side*.27,.41,.27,black);
   }
   const occupant=new T.Group();occupant.name='motorcycle-rider';for(const part of body.children.slice(riderStart))occupant.add(part);body.add(occupant);
-  const light=new T.SpotLight(0xd9f3ff,0,110,.32,.6,1.2);light.position.set(0,1.01,-.85);light.target.position.set(0,.35,-35);body.add(light,light.target);
+  batchStaticParts(root);
+  const light=new T.SpotLight(0xd9f3ff,0,110,.32,.6,1.2);light.visible=false;light.position.set(0,1.01,-.85);light.target.position.set(0,.35,-35);body.add(light,light.target);
   return {root,body,steers,wheels,steering,paint,alloy,glass,brake,head,lights:[light],occupant};
 }

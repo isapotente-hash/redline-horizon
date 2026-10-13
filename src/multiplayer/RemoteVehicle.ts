@@ -31,7 +31,7 @@ export class RemoteVehicle {
       const car = isBike(spec) || spec.kit==='pickup' || spec.kit==='roadster' || spec.kit==='supercar' ? makeVehicle(spec) : makeCar(false);
       if (!isBike(spec) && spec.kit !== 'pickup' && spec.kit !== 'roadster' && spec.kit !== 'supercar') fitCarPackage(car,spec);
       car.root.visible = false;
-      car.lights.forEach(light=>light.intensity=0);
+      car.lights.forEach(light=>{light.intensity=0;light.visible=false;});
       this.models.set(spec.id,car); this.root.add(car.root);
     }
     if (this.visual) this.visual.root.visible = false;

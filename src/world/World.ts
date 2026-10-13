@@ -1,4 +1,5 @@
 import {RACE_ROUTES,routeRoad} from '../racing/RouteCatalog';
+import {freezeScenery} from '../rendering/StaticScene';
 import {routePreview} from './RoutePreview';
 import {treeBudget} from '../rendering/RenderBudget';
 import {mobileDevice} from '../input/DevicePolicy';
@@ -119,7 +120,7 @@ export class World {
   async init(progress:(fraction:number)=>void=()=>{}){
     const total=this.network.roads.reduce((sum,road)=>sum+Math.ceil((road.samples.length-1)/80)+1,0)+this.network.structures.length;let done=0;
     for(const _ of this.buildRoads()){progress(Math.min(.94,++done/total*.94));await yieldLoading();}
-    this.buildCity();await yieldLoading();this.batchCity();await yieldLoading();this.buildSigns();progress(1);
+    this.buildCity();await yieldLoading();this.batchCity();await yieldLoading();this.buildSigns();freezeScenery(this.roadsGroup);freezeScenery(this.city);progress(1);
     return this;
   }
   get visualRadius(){return Math.max(1,Math.min(6,Math.ceil(this.settings.renderDistance/400)));}
@@ -303,7 +304,7 @@ export class World {
       const d=Math.hypot(x-cx,z-cz);if(d>radius+.2||this.farTiles.has(`${x},${z}`))continue;
       if(!nearest||d<nearest.d)nearest={x,z,d};
     }
-    if(nearest){const {x,z}=nearest,g=this.terrain(x*size,z*size,size,16,2),mesh=this.mesh(g,this.terrainMaterial,this.root);this.farTiles.set(`${x},${z}`,mesh);}
+    if(nearest){const {x,z}=nearest,g=this.terrain(x*size,z*size,size,16,2),mesh=this.mesh(g,this.terrainMaterial,this.root);freezeScenery(mesh);this.farTiles.set(`${x},${z}`,mesh);}
     for(const [key,mesh] of this.farTiles){const [x,z]=key.split(',').map(Number);if(Math.hypot(x-cx,z-cz)>radius+1.5){this.root.remove(mesh);mesh.geometry.dispose();this.farTiles.delete(key);}}
     return !!nearest;
   }
@@ -341,7 +342,7 @@ export class World {
       }
     }
     treeBatches.forEach((b,i)=>{b.foliage.count=b.wood.count=counts[i];b.nearFoliage.count=b.nearWood.count=0;b.nearFoliage.visible=b.nearWood.visible=false;for(const mesh of [b.foliage,b.wood,b.nearFoliage,b.nearWood])mesh.castShadow=mesh.receiveShadow=true;group.add(b.foliage,b.wood,b.nearFoliage,b.nearWood)});
-    rocks.count=nr;rocks.castShadow=rocks.receiveShadow=true;group.add(rocks,yield* this.regional.buildSteps(x,z,obstacles));this.root.add(group);
+    rocks.count=nr;rocks.castShadow=rocks.receiveShadow=true;group.add(rocks,yield* this.regional.buildSteps(x,z,obstacles));this.root.add(group);freezeScenery(group);
     const chunk:Chunk={group,geometry:g,x,z,treeBatches,treeLod:1,grass,obstacles,obstacleColliders:new Map()};this.chunks.set(`${x},${z}`,chunk);return chunk;
   }
   update(p: T.Vector3, force = false, view=p) {

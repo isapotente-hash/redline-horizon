@@ -496,6 +496,7 @@ export function makeCar(hero = true, color = "#b81120"): CarVisual {
 export function addHeadlights(car: CarVisual) {
   for (const s of [-1, 1]) {
     const light = new T.SpotLight("#e8f1ff", 0, 115, 0.28, 0.55, 1.2);
+    light.visible=false;
     light.position.set(s * 0.63, 0.7, -2.15);
     light.target.position.set(s * 0.63, 0.25, -42);
     car.root.add(light, light.target);

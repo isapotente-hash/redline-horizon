@@ -779,7 +779,7 @@ export class Game {
     this.car.brake.emissiveIntensity = this.vehicle.braking > 0.1 ? 4.0 : 0.6;
     const on = this.lights || this.render.night > 0.5;
     this.car.head.emissiveIntensity = on ? 4 : 1.8;
-    for(const light of this.car.lights)light.intensity=on?70:0;
+    for(const light of this.car.lights){light.intensity=on?70:0;light.visible=on;}
   }
   frame(now: number) {
     if (!this.running) return;

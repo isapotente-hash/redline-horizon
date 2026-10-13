@@ -21,6 +21,8 @@ export class Particles {
   skidIndex = 0;
   skidClock = 0;
   dummy = new T.Object3D();
+  private points:T.Points;
+  private dirty=false;
   private readonly point=new T.Vector3();private readonly smoke=new T.Color('#bbc1c9');private readonly dust=new T.Color('#b7aa8b');private readonly sprayColor=new T.Color('#b1c2ce');
   private readonly fire=new T.Color('#ff791d');private readonly bright=new T.Color('#fff2ac');private readonly dark=new T.Color('#48443f');private readonly nitro=new T.Color('#65dfff');
   private lastShift=-1;private lastBoost=-1;private exhaustClock=0;
@@ -41,13 +43,16 @@ export class Particles {
       fragmentShader:
         "varying float a;varying vec3 c;void main(){float r=length(gl_PointCoord-.5)*2.;if(r>1.)discard;gl_FragColor=vec4(c,(1.-r)*(1.-r)*a);}",
     });
-    const points = new T.Points(this.geometry, mat);
+    const points = this.points = new T.Points(this.geometry, mat);
+    points.visible=false;
+    for(const attribute of Object.values(this.geometry.attributes))(attribute as T.BufferAttribute).setUsage(T.DynamicDrawUsage);
     points.frustumCulled = false;
     this.root.add(points,this.flash);
     this.rainGeometry.setAttribute(
       "position",
       new T.BufferAttribute(this.rainPositions, 3),
     );
+    (this.rainGeometry.getAttribute('position') as T.BufferAttribute).setUsage(T.DynamicDrawUsage);
     this.rain = new T.LineSegments(
       this.rainGeometry,
       new T.LineBasicMaterial({
@@ -71,6 +76,7 @@ export class Particles {
       800,
     );
     this.skids.count = 0;
+    this.skids.instanceMatrix.setUsage(T.DynamicDrawUsage);
     this.skids.frustumCulled = false;
     this.root.add(this.skids);
   }
@@ -81,6 +87,7 @@ export class Particles {
     this.velocity[j]=(Math.random()-.5)*1.7;this.velocity[j+1]=Math.random()+.5;this.velocity[j+2]=(Math.random()-.5)*1.7;
     this.gravity[i]=0;
     this.life[i] = 1;
+    this.alphas[i]=.5;this.dirty=true;this.points.visible=true;
     this.sizes[i] = size;
   }
   explode(p:T.Vector3,severity:number) {
@@ -102,15 +109,19 @@ export class Particles {
       this.velocity[i*3]=-car.forward.x*3;this.velocity[i*3+1]=.1;this.velocity[i*3+2]=-car.forward.z*3;
     }
     this.flash.intensity*=Math.exp(-9*dt);
+    let alive=false;
     for (let i = 0; i < this.count; i++) {
       if (this.life[i] <= 0) continue;
+      this.dirty=true;
       this.life[i] -= dt * 0.6;
       this.velocity[i*3+1]-=this.gravity[i]*dt;
       this.alphas[i] = Math.max(0, this.life[i]) * 0.5;
       for (let j = 0; j < 3; j++)
         this.positions[i * 3 + j] += this.velocity[i * 3 + j] * dt;
       this.sizes[i] += dt * 0.7;
+      if(this.life[i]>0)alive=true;
     }
+    this.points.visible=alive;
     const slipping = Math.abs(car.slip) > 0.18 && car.speed > 9,
       offroad = car.surface === "GRAVEL" || car.surface === "GRASS",
       spray = s.weather === "rain" && car.speed > 12;
@@ -132,8 +143,11 @@ export class Particles {
         );
       }
     }
-    for (const name of ["position", "color", "alpha", "size"])
-      this.geometry.getAttribute(name).needsUpdate = true;
+    if(this.dirty){
+      for (const name of ["position", "color", "alpha", "size"])
+        this.geometry.getAttribute(name).needsUpdate = true;
+      this.dirty=false;
+    }
     this.rain.visible = s.weather === "rain" && active;
     const rainCount=Math.floor((s.quality==='low'||s.quality==='very-low'?480:1200)*(.15+.85*s.rainIntensity));
     this.rainGeometry.setDrawRange(0,rainCount*2);
