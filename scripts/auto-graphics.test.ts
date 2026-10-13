@@ -62,6 +62,19 @@ test('every automatic tier retains full CSS resolution and valid ascending world
 
 test('persistent extremely slow rendering is reduced instead of being mistaken for isolated stalls',()=>{const a=new AutoGraphics();for(let n=0;n<40;n++)a.observe(900,100,600,true);assert.equal(a.level,0);assert.equal(a.targetFps,30);});
 
+test('30 FPS recovery prioritizes frame rate over adding more graphics work',()=>{
+ const a=new AutoGraphics();run(a,4,[24,42,55,80,120]);assert.equal(a.targetFps,30);
+ // This load fits the 30 FPS budget but has insufficient headroom for 60 FPS.
+ run(a,120,[14,14,14,14,14]);assert.equal(a.level,0);assert.equal(a.targetFps,30);
+ // Once it cools, recover 60 FPS before enabling more expensive effects.
+ let restored=false;for(let n=0;n<700;n++){
+  a.observe(1000/a.targetFps,4,4,true);
+  if(a.targetFps===60){assert.equal(a.level,0);restored=true;break;}
+  assert.equal(a.level,0);
+ }
+ assert.ok(restored);
+});
+
 test('minimum manual distances survive saving while Auto can fall back to them and recover',()=>{
  let data=JSON.stringify({coins:75400,settings:{autoGraphics:false,quality:'high',renderDistance:10,simulationDistance:10}});
  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:(key:string)=>key===SAVE_KEY?data:null,setItem:(key:string,v:string)=>{if(key===SAVE_KEY)data=v;}}});

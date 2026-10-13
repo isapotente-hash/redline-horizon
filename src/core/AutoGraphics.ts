@@ -3,10 +3,10 @@ import {GRAPHICS_PRESETS,GraphicsQuality} from './GraphicsPresets';
 /** The canvas never drops below one rendered pixel per CSS pixel. */
 export const AUTO_GRAPHICS = [
   {quality:'very-low',label:'Very Low',pixelRatio:1,shadow:0,samples:0,ao:false,bloom:false},
-  {quality:'low',label:'Low',pixelRatio:1,shadow:1024,samples:2,ao:false,bloom:false},
-  {quality:'medium',label:'Medium',pixelRatio:1.25,shadow:2048,samples:2,ao:false,bloom:true},
-  {quality:'high',label:'High',pixelRatio:1.5,shadow:2048,samples:4,ao:true,bloom:true},
-  {quality:'ultra',label:'Extra High',pixelRatio:2,shadow:4096,samples:4,ao:true,bloom:true},
+  {quality:'low',label:'Low',pixelRatio:1,shadow:1024,samples:0,ao:false,bloom:false},
+  {quality:'medium',label:'Medium',pixelRatio:1,shadow:1024,samples:0,ao:false,bloom:true},
+  {quality:'high',label:'High',pixelRatio:1.25,shadow:2048,samples:2,ao:false,bloom:true},
+  {quality:'ultra',label:'Extra High',pixelRatio:1.5,shadow:2048,samples:4,ao:true,bloom:true},
 ] as const satisfies readonly {quality:GraphicsQuality;label:string;pixelRatio:number;shadow:number;samples:number;ao:boolean;bloom:boolean}[];
 
 /** Real gameplay measurements, with fast reductions and cautious upgrades.
@@ -64,7 +64,9 @@ export class AutoGraphics {
       this.slow=0;
     }
     if(this.fast>=20&&this.elapsed>=this.targetUpgradeAt){this.targetFps=60;return this.change();}
-    if(this.good>=(this.calibrating?1.5:12)&&this.level<this.maxLevel&&this.elapsed>=this.upgradeAt){this.level++;if(this.level===this.maxLevel)this.calibrating=false;return this.change();}
+    // Recover smooth motion first. Raising detail at 30 FPS used to reset the
+    // 20-second recovery window before it could ever restore the 60 FPS target.
+    if(this.targetFps===60&&this.good>=(this.calibrating?1.5:12)&&this.level<this.maxLevel&&this.elapsed>=this.upgradeAt){this.level++;if(this.level===this.maxLevel)this.calibrating=false;return this.change();}
     return false;
   }
 }

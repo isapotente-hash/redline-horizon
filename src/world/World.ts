@@ -368,7 +368,9 @@ export class World {
     else if(needed.length)this.queueChunk(needed[0].x,needed[0].z);
     for (const [key, c] of this.chunks) {
       const d = Math.hypot(c.x - cx, c.z - cz);
-      if(updateLod){
+      // A chunk can finish streaming while the camera is stationary. Initialize
+      // its LOD immediately instead of waiting for another eight metres of travel.
+      if(updateLod||!c.treeMembership){
         const {nearDistance,light}=treeBudget(this.settings.quality,this.mobile);
         for(const batch of c.treeBatches){const geometry=light?this.treeVariants[batch.variant].light:this.treeVariants[batch.variant].near;if(batch.nearFoliage.geometry!==geometry.foliage){batch.nearFoliage.geometry=geometry.foliage;batch.nearWood.geometry=geometry.wood;batch.nearFoliage.boundingSphere=batch.nearWood.boundingSphere=null;}}
         const membership=c.treeNextMembership??=new Uint8Array(c.treeBatches.reduce((n,b)=>n+b.transforms.length,0));let membershipIndex=0,membershipChanged=!c.treeMembership;

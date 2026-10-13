@@ -40,6 +40,7 @@ test('tree variants contain detailed branches, colored foliage and lighter dista
   assert.ok(tree.near.height>7&&tree.near.height<14);
   assert.ok(tree.near.radius>2&&tree.near.radius<7.5);
   assert.ok(tree.near.foliage.getAttribute('position').count>tree.far.foliage.getAttribute('position').count*4);
+  assert.ok(tree.far.wood.getAttribute('position').count/3<=144,'distant branches stay within the vertex budget');
   for(const level of [tree.near,tree.far])for(const g of [level.wood,level.foliage]){assert.equal(g.getAttribute('position').count,g.getAttribute('color').count);assert.ok([...g.getAttribute('position').array].every(Number.isFinite));g.dispose()}
  }
 });

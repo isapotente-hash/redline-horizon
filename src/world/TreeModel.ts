@@ -52,7 +52,7 @@ function buildTree(kind:number,low:boolean,light=false):TreeGeometry {
     g.setAttribute('color',new T.BufferAttribute(colors,3));g.deleteAttribute('uv');return g;
   }
   function branch(points:T.Vector3[],r0:number,r1:number,segments:number){
-    const curve=new T.CatmullRomCurve3(points),radial=low||light?6:12,frames=curve.computeFrenetFrames(segments,false);
+    const curve=new T.CatmullRomCurve3(points),radial=low?3:light?6:12,frames=curve.computeFrenetFrames(segments,false);
     const positions:number[]=[],indices:number[]=[];
     for(let j=0;j<=segments;j++) {const t=j/segments,p=curve.getPointAt(t),radius=r0+(r1-r0)*t;
       for(let i=0;i<radial;i++){const a=i/radial*Math.PI*2,r=radius*(1+.12*Math.sin(i*2.4+j*.65));const v=p.clone().addScaledVector(frames.normals[j],Math.cos(a)*r).addScaledVector(frames.binormals[j],Math.sin(a)*r);positions.push(v.x,v.y,v.z)}
@@ -60,7 +60,7 @@ function buildTree(kind:number,low:boolean,light=false):TreeGeometry {
     for(let j=0;j<segments;j++)for(let i=0;i<radial;i++){const a=j*radial+i,b=j*radial+(i+1)%radial;indices.push(a,b,a+radial,b,b+radial,a+radial)}
     const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(positions,3));g.setIndex(indices);g.computeVertexNormals();wood.push(tint(g.toNonIndexed(),'#80735a'));g.dispose();
   }
-  branch([trunkPoint(0),trunkPoint(.3),trunkPoint(.65),trunkPoint(1)],.32,.045,low||light?5:16);
+  branch([trunkPoint(0),trunkPoint(.3),trunkPoint(.65),trunkPoint(1)],.32,.045,low?4:light?5:16);
   if(!low&&!light)for(let i=0;i<5;i++){const a=i/5*Math.PI*2;branch([new T.Vector3(Math.cos(a)*.64,.025,Math.sin(a)*.64),trunkPoint(.08),trunkPoint(.19)],.10,.055,3)}
   const tiers=kind===1?5:3;
   for(let level=0;level<tiers;level++){
@@ -71,7 +71,7 @@ function buildTree(kind:number,low:boolean,light=false):TreeGeometry {
       const length=spread*(kind===1?1-level*.14:1-level*.15)*(.8+random()*.25);
       const start=trunkPoint(t),end=start.clone().add(new T.Vector3(Math.cos(angle)*length,.55+random()*.5,Math.sin(angle)*length));
       const midpoint=start.clone().lerp(end,.5);midpoint.y-=.27;
-      branch([start,midpoint,end],.085*(1-level*.1),.02,low||light?2:5);
+      branch([start,midpoint,end],.085*(1-level*.1),.02,low?1:light?2:5);
       const sprays=3;
       for(let k=0;k<sprays;k++){
         const center=end.clone();

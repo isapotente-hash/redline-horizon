@@ -14,6 +14,15 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { FXAAShader } from "three/addons/shaders/FXAAShader.js";
 import { Settings } from "../core/SaveManager";
 import { clamp, lerp } from "../core/math";
+
+// EffectComposer resizes disabled passes too. Keep unused effect targets tiny;
+// otherwise even Low reserves full-screen AO and bloom buffers on a 4K display.
+class BudgetSSAOPass extends SSAOPass {
+  override setSize(width:number,height:number){super.setSize(this.enabled?Math.max(1,Math.ceil(width/2)):1,this.enabled?Math.max(1,Math.ceil(height/2)):1);}
+}
+class BudgetBloomPass extends UnrealBloomPass {
+  override setSize(width:number,height:number){super.setSize(this.enabled?width:1,this.enabled?height:1);}
+}
 export class RenderSystem {
   scene = new T.Scene();
   camera = new T.PerspectiveCamera(62, 1, 0.1, 16000);
@@ -36,10 +45,14 @@ export class RenderSystem {
   resolutionScale=1;
   private mobile=mobileDevice();
   private automaticLevel:number|null=null;
+  private viewport=new T.Vector2();
+  private composerRatio=1;
   gpuTimer?:GpuTimer;
   get gpuMs(){return this.gpuTimer?.milliseconds??null;}
   private applyEffects(){
-    if(this.renderer)this.renderer.shadowMap.autoUpdate=true;
+    // The composer may draw the scene again for AO. Refresh shadows once per
+    // displayed frame, not again for each post-processing scene pass.
+    if(this.renderer)this.renderer.shadowMap.autoUpdate=false;
     if(this.ao)this.ao.enabled=renderBudget(this.settings.quality,this.automaticLevel,this.mobile).ao;
     if(this.bloom)this.bloom.enabled=renderBudget(this.settings.quality,this.automaticLevel,this.mobile).bloom;
   }
@@ -139,14 +152,14 @@ export class RenderSystem {
       const target=new T.WebGLRenderTarget(1,1,{type:T.HalfFloatType,samples:Math.min(4,this.renderer.capabilities.maxSamples)});
       this.composer = new EffectComposer(this.renderer,target);
       this.composer.addPass(new RenderPass(this.scene, this.camera));
-      this.ao = new SSAOPass(this.scene,this.camera,1,1,12);
+      this.ao = new BudgetSSAOPass(this.scene,this.camera,1,1,12);
       this.ao.ssaoMaterial.uniforms.cameraProjectionMatrix.value=this.camera.projectionMatrix;
       this.ao.ssaoMaterial.uniforms.cameraInverseProjectionMatrix.value=this.camera.projectionMatrixInverse;
       this.ao.kernelRadius=4;
       this.ao.minDistance=.0002;
       this.ao.maxDistance=.015;
       this.composer.addPass(this.ao);
-      this.bloom = new UnrealBloomPass(new T.Vector2(1, 1), 0.08, 0.35, 1.7);
+      this.bloom = new BudgetBloomPass(new T.Vector2(1, 1), 0.08, 0.35, 1.7);
       this.composer.addPass(this.bloom);
       this.grade=new ShaderPass({uniforms:{tDiffuse:{value:null},texel:{value:new T.Vector2()},sharpness:{value:.12}},
         vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
@@ -189,16 +202,20 @@ export class RenderSystem {
     this.renderer.shadowMap.enabled=profile.shadow>0;
     this.clouds.visible=true;
     // Auto can trim supersampling, but never renders below CSS resolution.
-    this.renderer.setPixelRatio(Math.max(1,Math.min(devicePixelRatio,profile.pixelRatio)));
+    const ratio=Math.max(1,Math.min(devicePixelRatio,profile.pixelRatio));
+    if(this.renderer.getPixelRatio()!==ratio)this.renderer.setPixelRatio(ratio);
     this.resolutionScale=1;
     this.applyEffects();
     if(this.composer){
-      this.composer.setPixelRatio(this.renderer.getPixelRatio());
+      if(this.composerRatio!==ratio){this.composer.setPixelRatio(ratio);this.composerRatio=ratio;}
       const samples=Math.min(profile.samples,this.renderer.capabilities.maxSamples);
       for(const target of [this.composer.renderTarget1,this.composer.renderTarget2]){
         if(target.samples!==samples){target.samples=samples;target.dispose();}
       }
       if(this.fxaa)this.fxaa.enabled=samples===0;
+      // Enabling an effect must allocate its targets even at an unchanged viewport.
+      this.ao?.setSize(innerWidth*ratio,innerHeight*ratio);
+      this.bloom?.setSize(innerWidth*ratio,innerHeight*ratio);
     }
     this.resize();
   }
@@ -207,8 +224,14 @@ export class RenderSystem {
       h = innerHeight;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    this.renderer?.setSize(w, h, false);
-    this.composer?.setSize(w, h);
+    if(this.renderer){
+      this.renderer.getSize(this.viewport);
+      if(this.viewport.x!==w||this.viewport.y!==h)this.renderer.setSize(w,h,false);
+    }
+    if(this.composer){
+      const ratio=this.composerRatio,target=this.composer.renderTarget1;
+      if(target.width!==w*ratio||target.height!==h*ratio)this.composer.setSize(w,h);
+    }
     if (this.fxaa && this.renderer) {
       const p = this.renderer.getPixelRatio();
       this.fxaa.material.uniforms.resolution.value.set(
@@ -281,6 +304,7 @@ export class RenderSystem {
     if(_stationary&&this.env&&this.environmentKey!==`${Math.floor(this.settings.hour)}:${this.settings.weather}`)this.environment();
     this.renderer.toneMappingExposure = this.exposure;
     this.renderer.info.reset();
+    this.renderer.shadowMap.needsUpdate=true;
     this.gpuTimer?.begin();
     try{this.composer!.render();}finally{this.gpuTimer?.end();}
   }

@@ -9,6 +9,18 @@ function dom(){(globalThis as any).document={createElement:()=>({getContext:()=>
 function storage(settings:any){const values=new Map([[SAVE_KEY,JSON.stringify({settings})]]);Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:(k:string)=>values.get(k)??null,setItem:(k:string,v:string)=>values.set(k,v)}});}
 function teleportFoot(foot:OnFootPlayer,x:number,y:number,z:number){foot.position.set(x,y,z);foot.previousPosition.copy(foot.position);foot.body.setTranslation(foot.position,true);foot.body.setNextKinematicTranslation(foot.position);foot.root.position.copy(foot.position);}
 
+test('newly streamed trees initialize LOD while the player and camera stay still',async()=>{
+ dom();const physics=await new PhysicsWorld().init(),world=new World(new RoadNetwork(),physics,{...defaults,quality:'low',renderDistance:500,simulationDistance:10}),focus=new T.Vector3(64,40,-300);
+ try{
+  world.update(focus,true);const chunk=world.chunks.get('0,-2')!;
+  // Reproduce a chunk completing between two ordinary streaming updates.
+  chunk.treeMembership=undefined;(world as any).lastUpdate=-Infinity;
+  world.update(focus);
+  assert.ok(chunk.treeMembership);
+  for(const batch of chunk.treeBatches)assert.equal(batch.foliage.count+batch.nearFoliage.count,batch.transforms.length);
+ }finally{physics.world.free();}
+});
+
 test('Very Low and 10 m render/10 m simulation limits save and reload; existing presets/defaults remain valid',()=>{
  storage({quality:'very-low',renderDistance:10,simulationDistance:10});const save=new SaveManager();assert.equal(save.settings.quality,'very-low');assert.equal(save.settings.renderDistance,10);assert.equal(save.settings.simulationDistance,10);save.save();const again=new SaveManager();assert.deepEqual(again.settings,save.settings);
  for(const quality of ['low','medium','high','ultra']){storage({quality,renderDistance:525,simulationDistance:275});const s=new SaveManager();assert.equal(s.settings.quality,quality);assert.equal(s.settings.renderDistance,525);assert.equal(s.settings.simulationDistance,275);}
